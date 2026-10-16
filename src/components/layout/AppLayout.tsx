@@ -5,7 +5,7 @@ import { useTeamMembers } from "../../hooks/useTeam";
 import { useUser } from "../../hooks/useUser";
 import { normalizeEmail } from "../../utils/text";
 import { ROUTES, pageTitle } from "../../utils/routes";
-import AgentChatLauncher from "../agent/AgentChatLauncher";
+import AssistantWidget from "../agent/AssistantWidget";
 import MemberAvatar from "../team/MemberAvatar";
 import PresenceDot from "../team/PresenceDot";
 import { ChartIcon, CloseIcon, DashboardIcon, FolderIcon, MenuIcon, ProfileIcon, ShieldIcon, SignOutIcon, TasksIcon, TeamIcon } from "../ui/Icons";
@@ -152,8 +152,8 @@ function AppLayout() {
           <Outlet />
         </main>
       </div>
-      {/* The planning assistant proposes changes to projects: managers only, like the agent API. */}
-      {isManager && <AgentChatLauncher />}
+      {/* The TeamTask assistant, for every role (permissions are applied by the server tools). */}
+      <AssistantWidget />
     </div>
   );
 }

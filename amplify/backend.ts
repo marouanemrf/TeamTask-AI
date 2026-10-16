@@ -15,6 +15,9 @@ import { weeklyReportFunction } from './functions/weekly-report/resource';
 import { manageTeamMemberFunction } from './functions/manage-team-member/resource';
 import { manageProfileFunction } from './functions/manage-profile/resource';
 import { presenceFunction } from './functions/presence/resource';
+import { assistantChatFunction } from './functions/assistant-chat/resource';
+import { assistantToolsFunction } from './functions/assistant-tools/resource';
+import { DEFAULT_ASSISTANT_MODEL, defineAssistant } from './custom/assistant/resource';
 import { storage } from './storage/resource';
 
 /**
@@ -38,6 +41,8 @@ const backend = defineBackend({
   manageTeamMemberFunction,
   manageProfileFunction,
   presenceFunction,
+  assistantChatFunction,
+  assistantToolsFunction,
 });
 
 // Internal tool: disable self sign-up. Accounts are created by an administrator only.
@@ -100,3 +105,21 @@ for (const fn of [backend.deadlineCheckFunction, backend.weeklyReportFunction]) 
     resources: [`arn:aws:ses:${fnStack.region}:${fnStack.account}:identity/*`],
   }));
 }
+
+// TeamTask assistant for all users (amplify/custom/assistant): Bedrock Agent + guardrail, tools
+// Lambda (read-only, organisation-scoped), POST /assistant/chat on API Gateway (Cognito authorizer).
+// ASSISTANT_MODEL_ID switches the model without code changes (e.g. an Amazon Nova profile).
+// Allowed browser origins: the Amplify Hosting URL of the branch being built, or local dev for the sandbox.
+const hostingOrigin = process.env.AWS_BRANCH && process.env.AWS_APP_ID ? `https://${process.env.AWS_BRANCH}.${process.env.AWS_APP_ID}.amplifyapp.com` : undefined;
+const assistant = defineAssistant({
+  toolsFunction: backend.assistantToolsFunction.resources.lambda,
+  chatFunction: backend.assistantChatFunction.resources.lambda,
+  userPool: backend.auth.resources.userPool,
+  tables: backend.data.resources.tables,
+  deployment: process.env.AWS_BRANCH ?? 'sandbox',
+  allowedOrigins: hostingOrigin ? [hostingOrigin] : ['http://localhost:5173', 'http://localhost:4173'],
+  modelId: process.env.ASSISTANT_MODEL_ID ?? DEFAULT_ASSISTANT_MODEL,
+});
+for (const [key, value] of Object.entries(assistant.toolsEnv)) backend.assistantToolsFunction.addEnvironment(key, value);
+for (const [key, value] of Object.entries(assistant.chatEnv)) backend.assistantChatFunction.addEnvironment(key, value);
+backend.addOutput({ custom: { teamtaskApi: { url: assistant.api.url } } });

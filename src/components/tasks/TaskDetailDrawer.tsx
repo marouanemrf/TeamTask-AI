@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import type { Dependency, Task, TaskEvent, TaskStatus, TeamMember } from "../../services/client";
 import { useTaskHistory } from "../../hooks/useTasks";
 import { formatDate, formatDateTime } from "../../utils/dates";
+import { openAssistant } from "../../utils/assistantEvents";
 import { projectPath } from "../../utils/routes";
 import { PRIORITY_LABELS, TASK_EVENT_LABELS, TASK_STATUS_LABELS } from "../../utils/projectLabels";
 import { blockReasonFor, blocksIds, dependsOnIds, isOverdue, latestStatusEvents, parseEventJson } from "../../utils/taskRules";
@@ -93,6 +94,10 @@ function TaskDetailDrawer(props: TaskDetailDrawerProps) {
         <span className={`status-text status-text--${(task.status ?? "TODO").toLowerCase()}`}>{TASK_STATUS_LABELS[task.status ?? "TODO"]}</span>
         <PriorityBadge priority={task.priority} />
         {task.createdBy === "AI" && <span className="chip chip--ai">AI</span>}
+        {/* The drawer makes the page inert, so the assistant is opened from here (with this task as context). */}
+        <button type="button" className="text-button drawer__assistant" onClick={openAssistant}>
+          Ask the assistant about this task
+        </button>
       </div>
 
       {block && <BlockReasonNote block={block} />}

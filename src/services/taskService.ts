@@ -57,6 +57,43 @@ export function observeProjectTasks(
   return () => subscription.unsubscribe();
 }
 
+/** One task the user can read, or null. */
+export async function getTask(taskId: string): Promise<Task | null> {
+  const { data, errors } = await client.models.Task.get({ id: taskId });
+  if (errors?.length) throw ApiError.from(errors, "Task load failed");
+  return data ?? null;
+}
+
+/** One task with the ids of the tasks it depends on (to edit it without changing its links). */
+export async function getTaskForEdit(taskId: string): Promise<{ task: Task; dependsOn: string[] }> {
+  const { data: task, errors } = await client.models.Task.get({ id: taskId });
+  if (errors?.length || !task) throw ApiError.from(errors, "This task no longer exists.");
+  const dependsOn: string[] = [];
+  let nextToken: string | null | undefined;
+  do {
+    const page = await client.models.Dependency.list({ filter: { fromTaskId: { eq: taskId } }, nextToken });
+    if (page.errors?.length) throw ApiError.from(page.errors, "Dependency load failed");
+    dependsOn.push(...page.data.map((d) => d.toTaskId));
+    nextToken = page.nextToken;
+  } while (nextToken);
+  return { task, dependsOn };
+}
+
+/** The editable fields of a stored task, as TaskInput. */
+export function taskToInput(task: Task): TaskInput {
+  return {
+    projectId: task.projectId,
+    title: task.title,
+    description: task.description ?? undefined,
+    priority: task.priority ?? "MEDIUM",
+    dueDate: task.dueDate ?? undefined,
+    estimatedHours: task.estimatedHours ?? undefined,
+    requiredSkills: (task.requiredSkills ?? []).filter((s): s is string => !!s),
+    assigneeId: task.assigneeId ?? undefined,
+    parentTaskId: task.parentTaskId ?? undefined,
+  };
+}
+
 /* -------------------------------------------------------------------------- */
 /* Writes (server-side rules + audit)                                          */
 /* -------------------------------------------------------------------------- */

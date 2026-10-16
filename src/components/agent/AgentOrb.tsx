@@ -1,8 +1,8 @@
-export type AgentOrbState = "idle" | "thinking" | "error";
+export type AgentOrbState = "idle" | "listening" | "thinking" | "proposing" | "error";
 
 /**
  * Lightweight animated orb that shows what the assistant is doing (CSS only, decorative).
- * Phase 6 swaps it for the 3D AgentOrb3D; the `state` prop stays the same.
+ * Fallback of AgentOrb3D when WebGL is unavailable; same `state` prop.
  */
 function AgentOrb({ state = "idle", size = "md" }: { state?: AgentOrbState; size?: "sm" | "md" }) {
   return (

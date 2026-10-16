@@ -143,6 +143,6 @@ for (const t of Object.values(tasks)) await reset("Task", t);
 mkdirSync(new URL("../../tests/security/", import.meta.url), { recursive: true });
 writeFileSync(
   new URL("../../tests/security/.fixtures.json", import.meta.url),
-  JSON.stringify({ region, userPoolId, identityPoolId: outputs.auth.identity_pool_id, bucket: outputs.storage.bucket_name, apiUrl: outputs.data.url, clientId: outputs.auth.user_pool_client_id, orgAId, orgBId, users, projects, tasks }, null, 2),
+  JSON.stringify({ region, userPoolId, identityPoolId: outputs.auth.identity_pool_id, bucket: outputs.storage.bucket_name, apiUrl: outputs.data.url, restApiUrl: outputs.custom?.teamtaskApi?.url ?? null, clientId: outputs.auth.user_pool_client_id, orgAId, orgBId, users, projects, tasks }, null, 2),
 );
 console.log(`Fixtures ready: ${USER_KEYS.length} users, org A ${orgAId}, org B ${orgBId}.`);

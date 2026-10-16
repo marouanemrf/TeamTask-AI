@@ -18,6 +18,8 @@ export interface Fixtures {
   identityPoolId: string;
   bucket: string;
   apiUrl: string;
+  /** API Gateway base URL (assistant), null if not deployed. */
+  restApiUrl: string | null;
   clientId: string;
   orgAId: string;
   orgBId: string;

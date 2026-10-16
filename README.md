@@ -1,32 +1,95 @@
-# React + TypeScript + Vite
+# TeamTask AI — Gogo Security
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+Task management for a cybersecurity consulting team: projects, Kanban, workload, reminders and
+escalations, weekly reports, and a role-aware AI assistant.
 
-Currently, two official plugins are available:
+## Architecture (as deployed today)
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```mermaid
+flowchart LR
+  U[Browser — React + TypeScript + Vite] -->|Cognito tokens| COG[Amazon Cognito<br/>groups ADMIN / PROJECT_MANAGER / MEMBER / VIEWER]
+  U -->|GraphQL| APPSYNC[AWS AppSync]
+  U -->|POST /assistant/chat (stream)| APIGW[API Gateway REST<br/>Cognito authorizer, throttling]
+  APPSYNC --> DDB[(Amazon DynamoDB<br/>one table per model)]
+  APPSYNC --> L1[Lambda task API<br/>create / edit / assign / status / cancel<br/>rules · idempotency · audit]
+  L1 --> DDB
+  APIGW --> CHAT[Lambda assistant-chat<br/>identity from token · rate limit]
+  CHAT --> AGENT[Amazon Bedrock Agent 'live'<br/>+ Guardrail]
+  AGENT --> TOOLS[Lambda assistant-tools<br/>read-only · organisation-scoped]
+  TOOLS --> DDB
+  SCHED[Scheduled Lambdas<br/>deadline-check · weekly-report] --> DDB
+  SCHED --> SES[Amazon SES]
+  U -->|profile photos| S3[(Amazon S3)]
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+Not built yet (planned, see `AUDIT_REPORT.md`): replacing AppSync with API Gateway + a single
+DynamoDB table, Step Functions approvals, the Bedrock planning agent, attachments, CloudTrail trail
+and CloudWatch dashboard/alarms.
+
+## Setup
+
+```bash
+npm ci
+npx ampx sandbox secret set SENDER_EMAIL   # a verified SES identity
+npx ampx sandbox secret set APP_URL        # http://localhost:5173
+npm run deploy:sandbox                     # fails unless "Deployment completed"
+npm run dev
+```
+
+Amplify Hosting builds with `amplify.yml` (Node 22, `ampx pipeline-deploy`, then `npm run build`).
+Per branch, set the secrets `SENDER_EMAIL` and `APP_URL` (`https://<branch>.<appId>.amplifyapp.com`)
+in the Amplify console. The first administrator is created in Cognito (group ADMIN); they create
+their own team profile on the **My profile** page, then add everyone else from **Team**.
+
+| Setting | Where | Default |
+|---|---|---|
+| `SENDER_EMAIL`, `APP_URL` | Amplify secrets (SSM Parameter Store) | — (required) |
+| `ASSISTANT_MODEL_ID` | environment at deploy time (Amplify console env var for branches) | `eu.anthropic.claude-haiku-4-5-20251001-v1:0` |
+| `/teamtask/<deployment>/assistant/modelId` | SSM parameter written by the stack (for reference) | the model in use |
+
+## AI assistant
+
+A floating 3D orb on every page opens the **TeamTask Assistant** for every role. Permissions are
+enforced by code, never by the model:
+
+- identity (user id, email, role) comes only from the Cognito token validated by API Gateway; the
+  organisation is looked up on the server; nothing in the message or the request body can change it;
+- every tool checks the role and the organisation and returns only the fields the role needs;
+  anything not allowed — or not existing — returns the same `FORBIDDEN`, and the assistant answers
+  "You don't have access to this information with your role.";
+- the assistant never writes: changes come back as **action cards**; **Confirm** calls the normal
+  task API with the user's own session, so all API rules apply again;
+- the guardrail filters prompt attacks (HIGH), off-topic requests and emails/phone numbers in
+  answers; content of tasks and documents is treated as data;
+- 30 messages per user per hour, 2,000 characters per message; activity (tool, role,
+  allowed/denied, duration) is logged without message text.
+
+| Tool | VIEWER | MEMBER | PROJECT_MANAGER | ADMIN |
+|---|---|---|---|---|
+| getMyTasks | — | ✓ | ✓ | ✓ |
+| getProjectStatus | aggregates | ✓ | ✓ | ✓ |
+| getProjectTasks | — | projects where they have a task; limited fields | ✓ full | ✓ full |
+| getTaskDetails | — | own task (full) or task of their project (limited) | ✓ | ✓ |
+| getWeeklyReports | summaries | ✓ | ✓ | ✓ |
+| getTeamWorkload | — | — | ✓ | ✓ |
+| getRisksAndDelays | — | own tasks | ✓ | ✓ |
+| getEscalations | — | — | ✓ | ✓ |
+| getAuditEvents | — | — | — | ✓ |
+| getAgentActivity | — | — | — | ✓ |
+| Action cards | none | change my task status, report a blocker | + assign, change due date, start planning | same as PM |
+
+The matrix lives in `amplify/functions/shared/assistantAccess.ts` (shown in the panel under
+"See my access") and is unit-tested tool × role in `amplify/functions/assistant-tools/tools.test.ts`.
+To switch the model (for example to an Amazon Nova profile if Anthropic models aren't enabled in the
+account), deploy with `ASSISTANT_MODEL_ID=eu.amazon.nova-lite-v1:0`; no code change.
+
+## Tests
+
+| Command | What |
+|---|---|
+| `npm test` | Unit tests (rules, Eisenhower, career suggestions, assistant permission matrix, chat parsing) |
+| `npm run lint` | oxlint |
+| `SEC_TEST_PASSWORD=… npm run security:setup` then `npm run test:security` | Live security suite against the sandbox (see `SECURITY_TEST_REPORT.md`) |
+| `npm run security:report` | Markdown tables from the last security run |
+
+Manual assistant checks: `docs/ASSISTANT_MANUAL_TEST.md`.

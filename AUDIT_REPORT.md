@@ -272,3 +272,30 @@ Sign in once with each user to set a password. Sign out and back in after any gr
 1. In Lambda → `deadline-check` → Test (empty event), with a task assigned to a verified SES recipient and due tomorrow. Expected: one Reminder row with SENT, and one email in French with a text part. For a task overdue by 2 or more days (or HIGH and overdue): one OPEN Escalation, and no duplicate on a second run.
 2. In Lambda → `weekly-report` → Test (empty event). Expected: one WeeklyReport per ACTIVE project for the current ISO week, and an email to `managerEmail`.
 3. In CloudWatch Logs for the task functions, rejected attempts should appear as `"outcome":"REJECTED"` warnings, with no TaskEvent written.
+
+---
+
+## Phase 1 — code done, deploy pending
+
+The AWS session expired during this phase: `npx ampx sandbox --once` could not run. Code checks pass
+(`tsc` app + amplify, unit tests, lint, e2e suites).
+
+- **Language:** one language, English, for UI, API errors and emails (about 130 French strings translated).
+- **Top 10 fixes:** Dependency read-only (#2); atomic idempotency with deterministic ids (#3); SES sender and app URL as Amplify secrets, no email in code (#4); `resolveEscalation` idempotent and audited, paginated member lookup (#5, #7); one weekly report per project and ISO week by id (#8). #1, #6, #9, #10 were fixed earlier.
+- **Other:** backend no longer imports from `src/`; paginated escalation lists; `.env*` git-ignored; contexts split for fast refresh; `npm run deploy:sandbox` fails unless "Deployment completed"; `npm run seed:demo` adds Nadia (Risk Analyst) and assigns "Incident response review".
+- **Remaining:** deploy and `seed:demo` (need `aws login`); 2 lint warnings (`set-state-in-effect`) to be removed with the data-layer rewrite.
+
+## Role-aware assistant (all users)
+
+| Part | What | Files |
+|---|---|---|
+| Permission matrix | Single source shared by tools and UI | `amplify/functions/shared/assistantAccess.ts` |
+| Tools | 11 tools, organisation-scoped, data minimised, cards only, FORBIDDEN without existence leak | `amplify/functions/assistant-tools/` (`tools.ts`, `dynamoSource.ts`, `handler.ts`, tests) |
+| Chat | Identity from the Cognito authorizer, organisation looked up on the server, 30/h rate limit, 2,000 chars, streamed NDJSON, cards only from tool outputs, activity logged without text | `amplify/functions/assistant-chat/` |
+| Infrastructure | Bedrock Agent (alias `live`), guardrail (prompt attack HIGH, off-topic, PII in answers), API Gateway REST (Cognito authorizer, streaming, throttling 20/50, access logs, body validation), assistant table (TTL, PITR), least-privilege IAM | `amplify/custom/assistant/resource.ts`, `amplify/backend.ts` |
+| UI | 3D orb launcher (lazy three.js, CSS fallback, reduced motion, paused when hidden, DPR ≤ 1.5); modal panel with role badge, access summary, "See my access", context chip, suggested questions per role, streaming, reasoning steps, action cards (Confirm runs the normal API with the user's session), new conversation, focus trap; opens from the task drawer too | `src/components/agent/*`, `src/hooks/useAssistant*.ts`, `src/services/assistantService.ts` |
+| Tests | 67 matrix/isolation/card unit tests, 8 chat unit tests, 26 e2e checks (mocked stream), live security tests `tests/security/m-assistant.test.ts` | |
+
+**Deviations from the request:** the stack has no API Gateway data API, single table, planner agent or Step Functions yet, so the assistant reads the existing per-model tables and its cards confirm through the existing task mutations; the organisation comes from a server-side lookup (Cognito has no org claim); the model id is a deploy-time setting (an SSM lookup at deploy fails under Amplify's deploy role) and the stack writes it to SSM for reference; UI text is English.
+
+**Remaining:** deploy (needs `aws login` and Bedrock model access for the chosen model); live security run; table scans in tools (fine for a pilot).
