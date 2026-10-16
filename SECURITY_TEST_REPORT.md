@@ -6,7 +6,7 @@ Re-run with the commands at the end; `npm run security:report` regenerates every
 the results.
 
 **Scope.** Tests target what is deployed: AppSync + Lambda task API, Cognito, the profile-photo S3
-bucket and, once deployed, the assistant (`POST /assistant/chat` on API Gateway, Bedrock Agent,
+bucket and, once deployed, the assistant (`POST /assistant/chat` on API Gateway, Bedrock Converse with tools,
 `assistant-tools`). Categories that need components not built yet (Step Functions approvals,
 Bedrock planner, attachments bucket, scheduler DLQ, CloudTrail trail) are recorded as **N/A** with
 the reason, never as passes.

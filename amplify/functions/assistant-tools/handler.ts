@@ -6,7 +6,7 @@ import { dynamoSource } from "./dynamoSource";
 import { runTool } from "./tools";
 import type { Caller, Params } from "./tools";
 
-/** Bedrock Agents action group event (function schema). */
+/** Tool call from assistant-chat (same shape as a Bedrock Agents action group event). */
 interface AgentToolEvent {
   messageVersion: string;
   actionGroup: string;
@@ -17,9 +17,9 @@ interface AgentToolEvent {
 }
 
 /**
- * Action group of the TeamTask assistant. The caller's identity comes ONLY from the session
- * attributes, which assistant-chat sets from the Cognito token (the model can't change them:
- * InvokeAgent sessionState is not exposed to the model, and tool parameters are separate).
+ * Tools of the TeamTask assistant, invoked only by assistant-chat (lambda:InvokeFunction is granted
+ * to that function alone). The caller's identity comes ONLY from the session attributes, which
+ * assistant-chat sets from the Cognito token; the model only chooses the tool and its parameters.
  * Every call is logged as activity (tool, role, allowed, duration) without content.
  */
 export const handler = async (event: AgentToolEvent) => {

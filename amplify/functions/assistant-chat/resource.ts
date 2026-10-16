@@ -1,6 +1,6 @@
 import { defineFunction } from '@aws-amplify/backend';
 
-/** POST /assistant/chat: identity from the Cognito authorizer, rate limit, streamed agent answer. */
+/** POST /assistant/chat: identity from the Cognito authorizer, rate limit, streamed answer (Bedrock Converse + tools). */
 export const assistantChatFunction = defineFunction({
   name: 'assistant-chat',
   entry: './handler.ts',

@@ -41,6 +41,12 @@ export type AssistantEvent =
   | { type: "error"; code: string; message: string }
   | { type: "done"; status: "COMPLETED" | "FAILED"; durationMs: number };
 
+/** Earlier turns of the conversation (text only; the server keeps no conversation). */
+export interface HistoryTurn {
+  role: "user" | "assistant";
+  text: string;
+}
+
 export interface PageContext {
   route: string;
   projectId?: string;
@@ -51,7 +57,7 @@ export const ASSISTANT_UNAVAILABLE = API_UNAVAILABLE;
 export const assistantApiUrl = restApiUrl;
 
 export async function streamAssistantChat(
-  input: { message: string; conversationId: string; pageContext: PageContext },
+  input: { message: string; conversationId: string; pageContext: PageContext; history: HistoryTurn[] },
   onEvent: (event: AssistantEvent) => void,
   signal?: AbortSignal,
 ): Promise<void> {

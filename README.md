@@ -14,8 +14,8 @@ flowchart LR
   APPSYNC --> L1[Lambda task API<br/>create / edit / assign / status / cancel<br/>rules · idempotency · audit]
   L1 --> DDB
   APIGW --> CHAT[Lambda assistant-chat<br/>identity from token · rate limit]
-  CHAT --> AGENT[Amazon Bedrock Agent 'live'<br/>+ Guardrail]
-  AGENT --> TOOLS[Lambda assistant-tools<br/>read-only · organisation-scoped]
+  CHAT --> AGENT[Amazon Bedrock Converse API<br/>tool use + Guardrail]
+  CHAT --> TOOLS[Lambda assistant-tools<br/>read-only · organisation-scoped]
   TOOLS --> DDB
   SCHED[Scheduled Lambdas<br/>deadline-check · weekly-report] --> DDB
   SCHED --> SES[Amazon SES]

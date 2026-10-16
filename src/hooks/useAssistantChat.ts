@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { streamAssistantChat } from "../services/assistantService";
-import type { ActionCard, ExecutionStep, PageContext } from "../services/assistantService";
+import type { ActionCard, ExecutionStep, HistoryTurn, PageContext } from "../services/assistantService";
 import { describeApiError } from "../utils/apiErrors";
 
 export type CardState = "pending" | "confirming" | "done" | "cancelled" | "failed";
@@ -37,10 +37,13 @@ export interface AssistantMessage {
   error?: string;
 }
 
+/** Earlier turns sent with each question (the server keeps no conversation). */
+const HISTORY_TURNS = 10;
+
 /**
- * The conversation with the TeamTask assistant, kept in memory for the browser session (the
- * widget lives in the app layout, so it survives navigation). "New conversation" also starts a new
- * agent memory on the server (new conversation id).
+ * The conversation with the TeamTask assistant, kept in memory for the browser session only (the
+ * widget lives in the app layout, so it survives navigation). Each question carries the last
+ * answered turns as plain text; "New conversation" clears them.
  */
 export function useAssistantChat() {
   const [messages, setMessages] = useState<AssistantMessage[]>([]);
@@ -58,6 +61,10 @@ export function useAssistantChat() {
       const message = text.trim();
       if (!message || busy) return;
       const answerId = crypto.randomUUID();
+      const history: HistoryTurn[] = (replaceFrom === undefined ? messages : messages.slice(0, replaceFrom))
+        .filter((m) => m.status === "done" && m.text.trim())
+        .slice(-HISTORY_TURNS)
+        .map((m) => ({ role: m.role, text: m.text }));
       setMessages((all) => [
         ...(replaceFrom === undefined ? all : all.slice(0, replaceFrom)),
         { id: crypto.randomUUID(), role: "user", text: message, cards: [], status: "done" },
@@ -74,7 +81,7 @@ export function useAssistantChat() {
       abort.current = controller;
       try {
         await streamAssistantChat(
-          { message, conversationId, pageContext },
+          { message, conversationId, pageContext, history },
           (event) => {
             const exec = (change: (e: Execution) => Execution) => update(answerId, (m) => (m.execution ? { ...m, execution: change(m.execution) } : m));
             if (event.type === "chunk") update(answerId, (m) => ({ ...m, text: m.text + event.text }));
@@ -101,7 +108,7 @@ export function useAssistantChat() {
         if (abort.current === controller) abort.current = null;
       }
     },
-    [busy, conversationId],
+    [busy, conversationId, messages],
   );
 
   const stop = useCallback(() => abort.current?.abort(), []);

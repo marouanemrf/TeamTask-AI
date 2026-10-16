@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { primaryAssistantRole, STEP_LABELS } from "../shared/assistantAccess";
 import type { AssistantRole } from "../shared/assistantAccess";
 
@@ -6,6 +5,9 @@ import type { AssistantRole } from "../shared/assistantAccess";
 
 export const MAX_MESSAGE = 2000;
 export const RATE_LIMIT_PER_HOUR = 30;
+/** Earlier turns of the conversation sent back by the browser (text only). */
+export const MAX_HISTORY_TURNS = 10;
+const MAX_HISTORY_TEXT = 4000;
 const ID = /^[A-Za-z0-9:_-]{1,128}$/;
 
 export interface Identity {
@@ -30,13 +32,23 @@ export function identityFromClaims(claims: Record<string, unknown> | undefined):
   return { userId, email, emailVerified: String(claims?.email_verified) === "true", role: primaryAssistantRole(groups), groups };
 }
 
+export interface HistoryTurn {
+  role: "user" | "assistant";
+  text: string;
+}
+
 export interface ChatRequest {
   message: string;
   conversationId: string;
   pageContext: { route: string; projectId?: string; taskId?: string };
+  history: HistoryTurn[];
 }
 
-/** Validates the body. Unknown fields (e.g. a forged "sessionAttributes" or "role") are dropped. */
+/**
+ * Validates the body. Unknown fields (e.g. a forged "sessionAttributes" or "role") are dropped.
+ * The history is plain text only: it can't carry tool results, action cards or identity, and the
+ * tools re-check every permission anyway.
+ */
 export function parseChatRequest(body: string | null | undefined): { ok: true; value: ChatRequest } | { ok: false; message: string } {
   let raw: unknown;
   try {
@@ -53,15 +65,42 @@ export function parseChatRequest(body: string | null | undefined): { ok: true; v
   const route = typeof ctx.route === "string" ? ctx.route.slice(0, 200) : "/";
   const projectId = typeof ctx.projectId === "string" && ID.test(ctx.projectId) ? ctx.projectId : undefined;
   const taskId = typeof ctx.taskId === "string" && ID.test(ctx.taskId) ? ctx.taskId : undefined;
-  return { ok: true, value: { message, conversationId, pageContext: { route, projectId, taskId } } };
+  const history = (Array.isArray(r.history) ? r.history : [])
+    .map((t) => (t && typeof t === "object" ? (t as Record<string, unknown>) : {}))
+    .filter((t) => (t.role === "user" || t.role === "assistant") && typeof t.text === "string" && t.text.trim())
+    .slice(-MAX_HISTORY_TURNS)
+    .map((t) => ({ role: t.role as HistoryTurn["role"], text: (t.text as string).trim().slice(0, MAX_HISTORY_TEXT) }));
+  return { ok: true, value: { message, conversationId, pageContext: { route, projectId, taskId }, history } };
 }
 
-/** Agent memory is per user (and per conversation the user starts), never shared. */
-export function sessionIdFor(userId: string, conversationId: string, day = new Date().toISOString().slice(0, 10)): string {
-  return createHash("sha256").update(`${userId}|${day}|${conversationId}`).digest("hex").slice(0, 64);
+/**
+ * Converse messages for this question: the earlier turns, then the new message. Converse needs a
+ * conversation that starts with the user and alternates roles, so consecutive turns of the same
+ * role are merged and a leading assistant turn is dropped.
+ */
+export function conversationFor(history: HistoryTurn[], message: string): Array<{ role: "user" | "assistant"; content: Array<{ text: string }> }> {
+  const turns: HistoryTurn[] = [];
+  for (const turn of [...history, { role: "user" as const, text: message }]) {
+    if (!turns.length && turn.role === "assistant") continue;
+    const last = turns[turns.length - 1];
+    if (last && last.role === turn.role) last.text = `${last.text}\n\n${turn.text}`;
+    else turns.push({ ...turn });
+  }
+  return turns.map((t) => ({ role: t.role, content: [{ text: t.text }] }));
 }
 
-/** What the tools trust (session attributes) — built only from the token and the server lookup. */
+/** Context for phrasing only (the tools re-check everything). */
+export function systemContext(identity: Identity, pageContext: ChatRequest["pageContext"], today = new Date().toISOString().slice(0, 10)): string {
+  return [
+    `Today: ${today}.`,
+    `The user's role: ${identity.role}.`,
+    `Current page: ${pageContext.route}.`,
+    ...(pageContext.projectId ? [`Current project id: ${pageContext.projectId}.`] : []),
+    ...(pageContext.taskId ? [`Current task id: ${pageContext.taskId}.`] : []),
+  ].join(" ");
+}
+
+/** What the tools trust (session attributes) — built only from the token and the server lookup, never by the model. */
 export function sessionAttributesFor(identity: Identity, orgId: string): Record<string, string> {
   return { userId: identity.userId, email: identity.email, orgId, role: identity.role };
 }
@@ -96,14 +135,6 @@ export const AGENT_NAME = "TeamTask Assistant";
 
 export const TOOL_LABELS = STEP_LABELS;
 
-interface TracePart {
-  orchestrationTrace?: {
-    invocationInput?: { actionGroupInvocationInput?: { function?: string } };
-    observation?: { actionGroupInvocationOutput?: { text?: string } };
-  };
-  guardrailTrace?: { action?: string };
-}
-
 /** Status and a content-free summary of a tool result (counts, refusal, card) — never the data itself. */
 export function summariseToolOutput(text: string | undefined): { status: StepStatus; summary: string; card?: unknown } {
   let parsed: { status?: string; data?: unknown; message?: string };
@@ -122,9 +153,9 @@ export function summariseToolOutput(text: string | undefined): { status: StepSta
 }
 
 /**
- * Follows one InvokeAgent stream: pairs each tool call with its result into steps (with status,
- * summary and duration), counts guardrail interventions, and takes action cards ONLY from tool
- * outputs (prepareAction results), never from the model's text, so the model can't forge a card.
+ * Follows one answer: pairs each tool call with its result into steps (with status, summary and
+ * duration), counts guardrail interventions, and takes action cards ONLY from tool outputs
+ * (prepareAction results), never from the model's text, so the model can't forge a card.
  */
 export class ExecutionTracker {
   readonly steps: ExecutionStep[] = [];
@@ -133,31 +164,32 @@ export class ExecutionTracker {
 
   constructor(private readonly clock: () => number = Date.now) {}
 
-  handle(trace: TracePart | undefined): ClientEvent[] {
+  /** The model called a tool. */
+  toolStarted(tool: string): ClientEvent[] {
+    const t0 = this.clock();
+    const step: ExecutionStep = { tool, label: TOOL_LABELS[tool] ?? "Using a tool", status: "RUNNING", summary: "Running…", startedAt: new Date(t0).toISOString() };
+    this.steps.push(step);
+    this.open = { step, t0 };
+    return [{ type: "step", step: { ...step } }];
+  }
+
+  /** The tool answered (its JSON body). */
+  toolFinished(output: string | undefined): ClientEvent[] {
     const events: ClientEvent[] = [];
-    const fn = trace?.orchestrationTrace?.invocationInput?.actionGroupInvocationInput?.function;
-    if (fn) {
-      const t0 = this.clock();
-      const step: ExecutionStep = { tool: fn, label: TOOL_LABELS[fn] ?? "Using a tool", status: "RUNNING", summary: "Running…", startedAt: new Date(t0).toISOString() };
-      this.steps.push(step);
-      this.open = { step, t0 };
-      events.push({ type: "step", step: { ...step } });
+    const result = summariseToolOutput(output);
+    if (this.open) {
+      Object.assign(this.open.step, { status: result.status, summary: result.summary, durationMs: this.clock() - this.open.t0 });
+      events.push({ type: "step", step: { ...this.open.step } });
+      this.open = null;
     }
-    const output = trace?.orchestrationTrace?.observation?.actionGroupInvocationOutput;
-    if (output) {
-      const result = summariseToolOutput(output.text);
-      if (this.open) {
-        Object.assign(this.open.step, { status: result.status, summary: result.summary, durationMs: this.clock() - this.open.t0 });
-        events.push({ type: "step", step: { ...this.open.step } });
-        this.open = null;
-      }
-      if (result.card) events.push({ type: "action", card: result.card });
-    }
-    if (trace?.guardrailTrace?.action === "INTERVENED") {
-      this.guardrailInterventions += 1;
-      events.push({ type: "guardrail" });
-    }
+    if (result.card) events.push({ type: "action", card: result.card });
     return events;
+  }
+
+  /** The guardrail blocked the question or the answer. */
+  guardrailIntervened(): ClientEvent[] {
+    this.guardrailInterventions += 1;
+    return [{ type: "guardrail" }];
   }
 
   get toolsCalled(): string[] {
