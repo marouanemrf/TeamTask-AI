@@ -6,6 +6,7 @@ import { formatDateTime } from "../utils/dates";
 import { ROLE_LABELS } from "../utils/roles";
 import { pageTitle } from "../utils/routes";
 import type { Role } from "../utils/roles";
+import LoadingState from "../components/ui/LoadingState";
 
 const STATUS: Record<string, string> = { COMPLETED: "Completed", FAILED: "Failed", RATE_LIMITED: "Rate limited", STOPPED: "Stopped" };
 const seconds = (ms: number | null) => (ms == null ? "—" : `${(ms / 1000).toFixed(1)} s`);
@@ -46,6 +47,7 @@ function AgentActivityPage() {
               <option value={30}>Last 30 days</option>
             </select>
             <button type="button" className="button-secondary" onClick={refresh} disabled={loading}>
+              {loading && <span className="spinner loading-state__spinner" aria-hidden="true" />}
               {loading ? "Loading…" : "Refresh"}
             </button>
           </div>
@@ -56,7 +58,7 @@ function AgentActivityPage() {
             <span>{error}</span>
           </div>
         ) : loading && !history ? (
-          <p className="empty-state">Loading activity…</p>
+          <LoadingState>Loading activity…</LoadingState>
         ) : !history?.executions.length ? (
           <p className="empty-state">No executions in this period.</p>
         ) : (

@@ -9,6 +9,7 @@ import type { TeamRole } from "../services/client";
 import type { AvatarChange, MemberInput } from "../services/teamService";
 import { ROLES, ROLE_LABELS } from "../utils/roles";
 import { isOpenTask } from "../utils/taskStats";
+import LoadingState from "../components/ui/LoadingState";
 
 type RoleFilter = TeamRole | "ALL";
 
@@ -97,7 +98,7 @@ function TeamPage() {
 
       {/* Members */}
       {loading ? (
-        <p className="empty-state panel">Loading team…</p>
+        <LoadingState className="empty-state panel">Loading team…</LoadingState>
       ) : error ? (
         <div className="form-alert" role="alert">
           <span>Unable to load the team. Please try again.</span>

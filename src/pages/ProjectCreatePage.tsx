@@ -4,6 +4,7 @@ import { useCreateProject } from "../hooks/useCreateProject";
 import type { ProjectFormValues } from "../hooks/useCreateProject";
 import { useUser } from "../hooks/useUser";
 import { ROUTES, projectPath } from "../utils/routes";
+import LoadingState from "../components/ui/LoadingState";
 
 /** Managers only. On success the project (and its CREATED audit event) exist; go to its page. */
 function ProjectCreatePage() {
@@ -12,7 +13,7 @@ function ProjectCreatePage() {
   const { create, submitting, error } = useCreateProject();
 
   if (organisationStatus === "loading") {
-    return <p className="empty-state panel">Loading…</p>;
+    return <LoadingState className="empty-state panel" />;
   }
 
   if (!isManager) {

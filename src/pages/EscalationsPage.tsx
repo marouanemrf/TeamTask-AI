@@ -4,6 +4,7 @@ import { useUser } from '../hooks/useUser';
 import { listOpenEscalations, resolveEscalation } from '../services/automationService';
 import type { EscalationView } from '../services/automationService';
 import { describeApiError } from '../utils/apiErrors';
+import LoadingState from "../components/ui/LoadingState";
 
 type Decision = 'REASSIGN' | 'EXTEND_DEADLINE' | 'ACCEPT_DELAY';
 const DECISION_LABELS: Record<Decision, string> = { REASSIGN: 'Reassign', EXTEND_DEADLINE: 'Extend the deadline', ACCEPT_DELAY: 'Accept the delay' };
@@ -49,7 +50,7 @@ function EscalationsPage() {
     <section className="panel">
       <h2 className="panel__title">Open escalations</h2>
       {error && <div className="form-alert" role="alert">{error}</div>}
-      {loading ? <p className="empty-state">Loading escalations…</p> : items.length === 0 ? <p className="empty-state">No open escalations.</p> : items.map((item) => {
+      {loading ? <LoadingState>Loading escalations…</LoadingState> : items.length === 0 ? <p className="empty-state">No open escalations.</p> : items.map((item) => {
         const decision = decisions[item.escalation.id] ?? 'ACCEPT_DELAY';
         return <article key={item.escalation.id} className="panel" style={{ marginTop: 16 }}>
           <h3>{item.task?.title ?? 'Task not found'}</h3>

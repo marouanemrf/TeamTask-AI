@@ -12,6 +12,7 @@ import type { Task, TaskPriority, TaskStatus } from "../services/client";
 import { dueBucket, isWithinLastDays, todayIsoDate } from "../utils/dates";
 import { PRIORITY_LABELS, TASK_PRIORITIES, TASK_STATUS_LABELS } from "../utils/projectLabels";
 import { blockReasonFor, canChangeStatus, checkStatusChange, completedAt, isOpenTask, isOverdue } from "../utils/taskRules";
+import LoadingState from "../components/ui/LoadingState";
 
 const FILTER_STATUSES: readonly TaskStatus[] = ["PROPOSED", "TODO", "IN_PROGRESS", "BLOCKED", "DONE"];
 const RECENT_DAYS = 7;
@@ -137,7 +138,7 @@ function MyTasksPage() {
   const error = notice ?? actions.error;
   const total = sections.overdue.length + sections.thisWeek.length + sections.later.length + sections.recentlyDone.length;
 
-  if (board.loading) return <p className="empty-state panel">Loading your tasks…</p>;
+  if (board.loading) return <LoadingState className="empty-state panel">Loading your tasks…</LoadingState>;
   if (board.myTasks.length === 0) return <p className="empty-state panel">No tasks assigned.</p>;
 
   return (

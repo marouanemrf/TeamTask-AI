@@ -8,6 +8,7 @@ import { useTasks } from "../hooks/useTasks";
 import { useUser } from "../hooks/useUser";
 import type { TeamMember } from "../services/client";
 import { useCareerSuggestions } from "../hooks/useCareerSuggestions";
+import LoadingState from "../components/ui/LoadingState";
 
 /** Self-service profile: edit the professional profile; the CV section includes the career suggestions. */
 export default function ProfilePage() {
@@ -28,7 +29,7 @@ export default function ProfilePage() {
   // AI suggestions from the saved profile; refreshed whenever the profile is saved (updatedAt).
   const career = useCareerSuggestions(member);
 
-  if (profile.loading) return <p className="empty-state panel">Loading your profile…</p>;
+  if (profile.loading) return <LoadingState className="empty-state panel">Loading your profile…</LoadingState>;
   if (!member) {
     if (!isAdmin || !profile.email) {
       return <p className="empty-state panel">Your team profile isn't available yet. Ask an administrator to add your account to the team.</p>;

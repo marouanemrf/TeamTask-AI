@@ -11,6 +11,7 @@ import { PROJECT_STATUSES, PROJECT_STATUS_LABELS } from "../utils/projectLabels"
 import { ROUTES } from "../utils/routes";
 import { projectProgress } from "../utils/taskRules";
 import { groupTasksByProject } from "../utils/taskStats";
+import LoadingState from "../components/ui/LoadingState";
 
 type StatusFilter = ProjectStatus | "ALL";
 
@@ -95,7 +96,7 @@ function ProjectsListPage() {
         {loading ? "" : `${filtered.length} project${filtered.length === 1 ? "" : "s"} shown`}
       </p>
       {loading ? (
-        <p className="empty-state panel">Loading projects…</p>
+        <LoadingState className="empty-state panel">Loading projects…</LoadingState>
       ) : error ? (
         <div className="form-alert" role="alert">
           <span>Unable to load projects. Please try again.</span>

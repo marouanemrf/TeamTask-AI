@@ -9,6 +9,7 @@ import AssistantWidget from "../agent/AssistantWidget";
 import MemberAvatar from "../team/MemberAvatar";
 import PresenceDot from "../team/PresenceDot";
 import { ChartIcon, ChatIcon, CloseIcon, DashboardIcon, FolderIcon, MenuIcon, ProfileIcon, ShieldIcon, SignOutIcon, TasksIcon, TeamIcon } from "../ui/Icons";
+import ThemeToggle from "../ui/ThemeToggle";
 
 interface NavItem {
   to: string;
@@ -100,6 +101,7 @@ function AppLayout() {
           </ul>
         </nav>
         <div className="sidebar__footer">
+          <ThemeToggle />
           {/* Profile sits just above Sign out; the user's picture replaces the icon when one is set. */}
           <Link
             to={ROUTES.profile}

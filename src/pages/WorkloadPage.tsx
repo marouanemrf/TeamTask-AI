@@ -11,6 +11,7 @@ import { todayIsoDate } from "../utils/dates";
 import { ROUTES } from "../utils/routes";
 import { isOpenTask, isOverdue, rankAssignees } from "../utils/taskRules";
 import { computeWorkload, summariseWorkload } from "../utils/workload";
+import LoadingState from "../components/ui/LoadingState";
 
 /** Team workload (managers): load per member, overdue counts, and reassignment of overdue / overloaded work. */
 function WorkloadPage() {
@@ -139,7 +140,7 @@ function WorkloadPage() {
       )}
 
       {loading ? (
-        <p className="empty-state panel">Loading team workload…</p>
+        <LoadingState className="empty-state panel">Loading team workload…</LoadingState>
       ) : rows.length === 0 ? (
         <p className="empty-state panel">No team members yet.</p>
       ) : (

@@ -16,6 +16,7 @@ import { TASK_STATUS_LABELS, TASK_STATUS_ORDER } from "../utils/projectLabels";
 import { ROUTES, projectPath } from "../utils/routes";
 import { isOpenTask, isOverdue } from "../utils/taskStats";
 import { computeWorkload } from "../utils/workload";
+import LoadingState from "../components/ui/LoadingState";
 
 function MemberDetailPage() {
   const { id } = useParams();
@@ -51,7 +52,7 @@ function MemberDetailPage() {
     }));
   }, [memberTasks]);
 
-  if (loading) return <p className="empty-state panel">Loading member…</p>;
+  if (loading) return <LoadingState className="empty-state panel">Loading member…</LoadingState>;
 
   if (!member) {
     return (
@@ -165,7 +166,7 @@ function MemberDetailPage() {
           </h2>
           <SkillChips skills={member.skills ?? []} />
           <h2 className="panel__title panel__title--spaced">Weekly workload</h2>
-          {tasksLoading ? <p className="empty-state">Loading…</p> : <WorkloadBar workload={workload} />}
+          {tasksLoading ? <LoadingState /> : <WorkloadBar workload={workload} />}
           <p className="form-hint">Sum of estimated hours of open tasks vs. weekly capacity ({member.weeklyCapacityHours ?? 0} h).</p>
         </section>
 
@@ -175,7 +176,7 @@ function MemberDetailPage() {
             Assigned tasks ({memberTasks.length})
           </h2>
           {tasksLoading ? (
-            <p className="empty-state">Loading…</p>
+            <LoadingState />
           ) : groups.length === 0 ? (
             <p className="empty-state">No tasks assigned.</p>
           ) : (

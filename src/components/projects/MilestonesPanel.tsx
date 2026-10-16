@@ -2,6 +2,7 @@ import { useId, useState } from "react";
 import type { FormEvent } from "react";
 import type { Milestone } from "../../services/client";
 import { formatDate } from "../../utils/dates";
+import LoadingState from "../ui/LoadingState";
 
 export interface MilestonesPanelProps {
   milestones: Milestone[];
@@ -74,7 +75,7 @@ function MilestonesPanel({ milestones, loading, today, canCreate, submitting, er
       )}
 
       {loading ? (
-        <p className="empty-state panel">Loading milestones…</p>
+        <LoadingState className="empty-state panel">Loading milestones…</LoadingState>
       ) : milestones.length === 0 ? (
         <p className="empty-state panel">No milestones yet.</p>
       ) : (

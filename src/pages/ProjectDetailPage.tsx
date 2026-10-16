@@ -20,6 +20,7 @@ import { todayIsoDate } from "../utils/dates";
 import { TASK_STATUS_LABELS } from "../utils/projectLabels";
 import { projectReportsPath, ROUTES } from "../utils/routes";
 import { canChangeStatus, checkStatusChange, projectProgress } from "../utils/taskRules";
+import LoadingState from "../components/ui/LoadingState";
 
 const TABS = [
   { id: "kanban", label: "Kanban board" },
@@ -108,7 +109,7 @@ function ProjectDetailPage() {
     document.getElementById(`tab-${TABS[nextIndex].id}`)?.focus();
   }
 
-  if (loading) return <p className="empty-state panel">Loading project…</p>;
+  if (loading) return <LoadingState className="empty-state panel">Loading project…</LoadingState>;
 
   if (!project) {
     return (
@@ -199,7 +200,7 @@ function ProjectDetailPage() {
             onCreate={milestones.create}
           />
         ) : board.loading ? (
-          <p className="empty-state panel">Loading tasks…</p>
+          <LoadingState className="empty-state panel">Loading tasks…</LoadingState>
         ) : tab === "list" ? (
           <TaskListTable
             tasks={board.tasks}

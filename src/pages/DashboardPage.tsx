@@ -13,6 +13,7 @@ import { activeEscalations } from "../utils/escalations";
 import { ROUTES } from "../utils/routes";
 import { todayIsoDate } from "../utils/dates";
 import { completionPercent, isOverdue, upcomingTasks } from "../utils/taskStats";
+import LoadingState from "../components/ui/LoadingState";
 
 const MAX_ITEMS = 5;
 
@@ -88,7 +89,7 @@ function DashboardPage() {
             My upcoming tasks
           </h2>
           {tasksLoading || membersLoading ? (
-            <p className="empty-state">Loading…</p>
+            <LoadingState />
           ) : (
             <TaskList
               tasks={myUpcoming}
@@ -103,7 +104,7 @@ function DashboardPage() {
           <h2 id="recent-projects-title" className="panel__title">
             Recent projects
           </h2>
-          {projectsLoading ? <p className="empty-state">Loading…</p> : <RecentProjects projects={recentProjects} />}
+          {projectsLoading ? <LoadingState /> : <RecentProjects projects={recentProjects} />}
         </section>
       </div>
       {/* Managers get the team-wide project overview; everyone else a matrix of their own tasks. */}

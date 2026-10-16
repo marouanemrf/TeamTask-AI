@@ -11,6 +11,7 @@ import SkillChips from "../team/SkillChips";
 import Modal from "../ui/Modal";
 import BlockReasonNote from "./BlockReasonNote";
 import PriorityBadge from "./PriorityBadge";
+import LoadingState from "../ui/LoadingState";
 
 /** Statuses offered in the drawer's status control (CANCELLED goes through "Cancel task"). */
 const MOVE_TARGETS: readonly TaskStatus[] = ["PROPOSED", "TODO", "IN_PROGRESS", "BLOCKED", "DONE"];
@@ -201,7 +202,7 @@ function TaskDetailDrawer(props: TaskDetailDrawerProps) {
 
       <h3 className="drawer__section">History</h3>
       {historyLoading ? (
-        <p className="text-muted">Loading…</p>
+        <LoadingState className="text-muted" />
       ) : events.length === 0 ? (
         <p className="text-muted">No history yet.</p>
       ) : (

@@ -6,6 +6,7 @@ import { generateWeeklyReport, observeProjectReports } from '../services/automat
 import type { WeeklyReport } from '../services/client';
 import { describeApiError } from '../utils/apiErrors';
 import { projectPath } from '../utils/routes';
+import LoadingState from "../components/ui/LoadingState";
 
 function ReportsPage() {
   const { id } = useParams();
@@ -28,7 +29,7 @@ function ReportsPage() {
     finally { setGenerating(false); }
   }
 
-  if (projectLoading) return <p className="empty-state panel">Loading project…</p>;
+  if (projectLoading) return <LoadingState className="empty-state panel">Loading project…</LoadingState>;
   if (!project) return <div className="panel"><p>Project not found.</p><Link className="text-link" to="/projects">Back to projects</Link></div>;
   return <div className="page-stack">
     <section className="panel">
