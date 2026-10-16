@@ -1,0 +1,42 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+
+# amplify
+node_modules
+.amplify
+amplify_outputs*
+amplifyconfiguration*
+
+# environment files (secrets live in SSM, never in the repo)
+.env
+.env.*
+
+# e2e build with a test API URL
+dist-agent-test
+
+# security test fixtures and results (contain account ids and user ids)
+tests/security/.fixtures.json
+tests/security/.results.jsonl

@@ -1,0 +1,105 @@
+import { defineBackend } from '@aws-amplify/backend';
+import { Stack } from 'aws-cdk-lib';
+import { Policy, PolicyStatement } from 'aws-cdk-lib/aws-iam';
+import { StringParameter } from 'aws-cdk-lib/aws-ssm';
+import { auth } from './auth/resource';
+import { data } from './data/resource';
+import { assignTaskFunction } from './functions/assign-task/resource';
+import { cancelTaskFunction } from './functions/cancel-task/resource';
+import { changeTaskStatusFunction } from './functions/change-task-status/resource';
+import { createTaskFunction } from './functions/create-task/resource';
+import { deadlineCheckFunction } from './functions/deadline-check/resource';
+import { logEventFunction } from './functions/log-event/resource';
+import { resolveEscalationFunction } from './functions/resolve-escalation/resource';
+import { updateTaskFunction } from './functions/update-task/resource';
+import { weeklyReportFunction } from './functions/weekly-report/resource';
+import { manageTeamMemberFunction } from './functions/manage-team-member/resource';
+import { manageProfileFunction } from './functions/manage-profile/resource';
+import { presenceFunction } from './functions/presence/resource';
+import { storage } from './storage/resource';
+
+/**
+ * TeamTask AI backend: Cognito auth + AppSync/DynamoDB data + S3 storage (profile pictures)
+ * + Lambda task API (business rules, idempotency and audit enforced server-side).
+ * @see https://docs.amplify.aws/react/build-a-backend/
+ */
+const backend = defineBackend({
+  auth,
+  data,
+  storage,
+  createTaskFunction,
+  updateTaskFunction,
+  changeTaskStatusFunction,
+  assignTaskFunction,
+  cancelTaskFunction,
+  logEventFunction,
+  deadlineCheckFunction,
+  weeklyReportFunction,
+  resolveEscalationFunction,
+  manageTeamMemberFunction,
+  manageProfileFunction,
+  presenceFunction,
+});
+
+// Internal tool: disable self sign-up. Accounts are created by an administrator only.
+const { cfnUserPool } = backend.auth.resources.cfnResources;
+cfnUserPool.adminCreateUserConfig = {
+  allowAdminCreateUserOnly: true,
+};
+
+// The task functions identify the caller by email. AppSync forwards the access token, which has
+// no email claim, so they read it from the user pool: read-only AdminGetUser on this pool only.
+const userPool = backend.auth.resources.userPool;
+for (const fn of [
+  backend.createTaskFunction,
+  backend.updateTaskFunction,
+  backend.changeTaskStatusFunction,
+  backend.assignTaskFunction,
+  backend.cancelTaskFunction,
+  backend.logEventFunction,
+  backend.weeklyReportFunction,
+  backend.resolveEscalationFunction,
+  backend.manageProfileFunction,
+  backend.presenceFunction,
+]) {
+  fn.addEnvironment('USER_POOL_ID', userPool.userPoolId);
+  fn.resources.lambda.addToRolePolicy(
+    new PolicyStatement({ actions: ['cognito-idp:AdminGetUser'], resources: [userPool.userPoolArn] }),
+  );
+}
+backend.manageTeamMemberFunction.addEnvironment('USER_POOL_ID', userPool.userPoolId);
+backend.manageTeamMemberFunction.resources.lambda.addToRolePolicy(new PolicyStatement({
+  actions: ['cognito-idp:AdminGetUser', 'cognito-idp:AdminCreateUser', 'cognito-idp:AdminDeleteUser', 'cognito-idp:AdminDisableUser', 'cognito-idp:AdminEnableUser', 'cognito-idp:AdminAddUserToGroup', 'cognito-idp:AdminRemoveUserFromGroup'],
+  resources: [userPool.userPoolArn],
+}));
+
+// Self-service profile photos. A user in a Cognito group assumes the group's IAM role, which the
+// storage rule allow.entity('identity') does not reach: give every group role the same
+// "own folder only" write access the authenticated role has (identity id from the session).
+// The policy lives in the storage stack, like Amplify's own storage policies, so the auth stack
+// never references the bucket (that would make the two nested stacks depend on each other).
+const avatarsBucket = backend.storage.resources.bucket;
+new Policy(Stack.of(avatarsBucket), 'GroupOwnProfilePhotoPolicy', {
+  statements: [
+    new PolicyStatement({
+      actions: ['s3:PutObject', 's3:DeleteObject'],
+      resources: [`${avatarsBucket.bucketArn}/profile-avatars/` + '${cognito-identity.amazonaws.com:sub}/*'],
+    }),
+  ],
+  roles: (['ADMIN', 'PROJECT_MANAGER', 'MEMBER', 'VIEWER'] as const).map((group) => backend.auth.resources.groups[group].role),
+});
+
+// Email settings live in SSM Parameter Store, not in code (create them once per account):
+//   /teamtask/ses/senderEmail  verified SES identity used as the sender
+//   /teamtask/app/url          base URL of the app in emails (http://localhost:5173 or the Hosting URL)
+// The values are resolved by CloudFormation at deploy time; SES access is scoped to that one identity.
+for (const fn of [backend.deadlineCheckFunction, backend.weeklyReportFunction]) {
+  const fnStack = Stack.of(fn.resources.lambda);
+  const senderEmail = StringParameter.valueForStringParameter(fnStack, '/teamtask/ses/senderEmail');
+  fn.addEnvironment('SENDER_EMAIL', senderEmail);
+  fn.addEnvironment('APP_URL', StringParameter.valueForStringParameter(fnStack, '/teamtask/app/url'));
+  fn.resources.lambda.addToRolePolicy(new PolicyStatement({
+    actions: ['ses:SendEmail', 'ses:SendRawEmail'],
+    resources: [`arn:aws:ses:${fnStack.region}:${fnStack.account}:identity/${senderEmail}`],
+  }));
+}
