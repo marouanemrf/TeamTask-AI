@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { streamAssistantChat } from "../services/assistantService";
-import type { ActionCard, PageContext } from "../services/assistantService";
+import type { ActionCard, ExecutionStep, PageContext } from "../services/assistantService";
 import { describeApiError } from "../utils/apiErrors";
 
 export type CardState = "pending" | "confirming" | "done" | "cancelled" | "failed";
@@ -13,11 +13,25 @@ export interface CardEntry {
   result?: string;
 }
 
+/** What the agent did for one answer, as reported by the server (observable steps, no hidden reasoning). */
+export interface Execution {
+  id: string | null;
+  agent: string;
+  /** The question this execution answered (kept in the browser only). */
+  objective: string;
+  status: "RUNNING" | "COMPLETED" | "FAILED" | "STOPPED";
+  startedAt: string;
+  durationMs?: number;
+  steps: ExecutionStep[];
+  guardrailInterventions: number;
+}
+
 export interface AssistantMessage {
   id: string;
   role: "user" | "assistant";
   text: string;
-  trace: { step: string; label: string }[];
+  /** Assistant answers only. */
+  execution?: Execution;
   cards: CardEntry[];
   status: "streaming" | "done" | "stopped" | "error";
   error?: string;
@@ -46,8 +60,15 @@ export function useAssistantChat() {
       const answerId = crypto.randomUUID();
       setMessages((all) => [
         ...(replaceFrom === undefined ? all : all.slice(0, replaceFrom)),
-        { id: crypto.randomUUID(), role: "user", text: message, trace: [], cards: [], status: "done" },
-        { id: answerId, role: "assistant", text: "", trace: [], cards: [], status: "streaming" },
+        { id: crypto.randomUUID(), role: "user", text: message, cards: [], status: "done" },
+        {
+          id: answerId,
+          role: "assistant",
+          text: "",
+          cards: [],
+          status: "streaming",
+          execution: { id: null, agent: "TeamTask Assistant", objective: message, status: "RUNNING", startedAt: new Date().toISOString(), steps: [], guardrailInterventions: 0 },
+        },
       ]);
       const controller = new AbortController();
       abort.current = controller;
@@ -55,8 +76,17 @@ export function useAssistantChat() {
         await streamAssistantChat(
           { message, conversationId, pageContext },
           (event) => {
+            const exec = (change: (e: Execution) => Execution) => update(answerId, (m) => (m.execution ? { ...m, execution: change(m.execution) } : m));
             if (event.type === "chunk") update(answerId, (m) => ({ ...m, text: m.text + event.text }));
-            else if (event.type === "trace") update(answerId, (m) => ({ ...m, trace: [...m.trace, { step: event.step, label: event.label }] }));
+            else if (event.type === "execution") exec((e) => ({ ...e, id: event.executionId, agent: event.agent, startedAt: event.startedAt }));
+            else if (event.type === "step")
+              // A step arrives when the tool is called (RUNNING) and again with its outcome.
+              exec((e) => {
+                const i = e.steps.findIndex((s) => s.startedAt === event.step.startedAt && s.tool === event.step.tool);
+                return { ...e, steps: i >= 0 ? e.steps.map((s, j) => (j === i ? event.step : s)) : [...e.steps, event.step] };
+              });
+            else if (event.type === "guardrail") exec((e) => ({ ...e, guardrailInterventions: e.guardrailInterventions + 1 }));
+            else if (event.type === "done") exec((e) => ({ ...e, status: event.status, durationMs: event.durationMs }));
             else if (event.type === "action") update(answerId, (m) => ({ ...m, cards: [...m.cards, { id: crypto.randomUUID(), card: event.card, state: "pending" }] }));
             else if (event.type === "error") update(answerId, (m) => ({ ...m, status: "error", error: event.message }));
           },
@@ -64,8 +94,9 @@ export function useAssistantChat() {
         );
         update(answerId, (m) => (m.status === "streaming" ? { ...m, status: "done" } : m));
       } catch (err) {
-        if (controller.signal.aborted) update(answerId, (m) => ({ ...m, status: "stopped" }));
-        else update(answerId, (m) => ({ ...m, status: "error", error: describeApiError(err) }));
+        const close = (status: Execution["status"]) => (e?: Execution) => (e && e.status === "RUNNING" ? { ...e, status } : e);
+        if (controller.signal.aborted) update(answerId, (m) => ({ ...m, status: "stopped", execution: close("STOPPED")(m.execution) }));
+        else update(answerId, (m) => ({ ...m, status: "error", error: describeApiError(err), execution: close("FAILED")(m.execution) }));
       } finally {
         if (abort.current === controller) abort.current = null;
       }

@@ -7,7 +7,7 @@ import { useProjects } from "../hooks/useProjects";
 import { useTasks } from "../hooks/useTasks";
 import { useUser } from "../hooks/useUser";
 import type { TeamMember } from "../services/client";
-import { suggestCareers } from "../utils/careerSuggestions";
+import { useCareerSuggestions } from "../hooks/useCareerSuggestions";
 
 /** Self-service profile: edit the professional profile; the CV section includes the career suggestions. */
 export default function ProfilePage() {
@@ -25,19 +25,8 @@ export default function ProfilePage() {
     return projects.filter((p) => ids.has(p.id));
   }, [member, tasks, projects]);
 
-  const suggestions = useMemo(
-    () =>
-      member
-        ? suggestCareers({
-            skills: (member.skills ?? []).filter((s): s is string => !!s),
-            jobTitle: member.jobTitle,
-            experience: member.experience,
-            education: member.education,
-            projects: relatedProjects.map((p) => [p.name, p.objective].filter(Boolean).join(" ")),
-          })
-        : [],
-    [member, relatedProjects],
-  );
+  // AI suggestions from the saved profile; refreshed whenever the profile is saved (updatedAt).
+  const career = useCareerSuggestions(member);
 
   if (profile.loading) return <p className="empty-state panel">Loading your profile…</p>;
   if (!member) {
@@ -82,7 +71,7 @@ export default function ProfilePage() {
         onSave={profile.save}
         canEditJobTitle={isAdmin}
       />
-      <CvBuilder member={member} email={profile.email} projects={relatedProjects} suggestions={suggestions} />
+      <CvBuilder member={member} email={profile.email} projects={relatedProjects} career={career.state} onRefreshCareer={career.refresh} />
     </div>
   );
 }

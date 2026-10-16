@@ -7,7 +7,9 @@ import { useProjects } from "../hooks/useProjects";
 import { useAllTasksBoard } from "../hooks/useTasks";
 import EisenhowerMatrix from "../components/projects/EisenhowerMatrix";
 import { useUser } from "../hooks/useUser";
-import { observeOpenEscalationCount } from "../services/automationService";
+import { observeOpenEscalations } from "../services/automationService";
+import type { Escalation } from "../services/client";
+import { activeEscalations } from "../utils/escalations";
 import { ROUTES } from "../utils/routes";
 import { todayIsoDate } from "../utils/dates";
 import { completionPercent, isOverdue, upcomingTasks } from "../utils/taskStats";
@@ -16,11 +18,13 @@ const MAX_ITEMS = 5;
 
 function DashboardPage() {
   const { isManager } = useUser();
-  const [openEscalations, setOpenEscalations] = useState(0);
-  useEffect(() => isManager ? observeOpenEscalationCount(setOpenEscalations, (error) => console.error("[Dashboard] Escalation count failed", error)) : undefined, [isManager]);
+  const [escalations, setEscalations] = useState<Escalation[]>([]);
+  useEffect(() => isManager ? observeOpenEscalations(setEscalations, (error) => console.error("[Dashboard] Escalation count failed", error)) : undefined, [isManager]);
   const { projects, loading: projectsLoading } = useProjects();
   const board = useAllTasksBoard();
   const tasks = board.tasks;
+  // Escalations still needing a decision (OPEN, task still open) — same rule as the escalations page.
+  const openEscalations = useMemo(() => activeEscalations(escalations, board.tasksById).length, [escalations, board.tasksById]);
   const tasksLoading = board.loading;
   const myMemberIds = board.myMemberIds;
   const membersLoading = board.loading;
@@ -67,7 +71,7 @@ function DashboardPage() {
             value={tasksLoading ? "—" : `${stats.donePercent}%`}
             hint={tasksLoading ? undefined : `${stats.done} of ${stats.totalTasks}`}
           />
-          {isManager && <StatCard label="Open escalations" value={String(openEscalations)} tone={openEscalations ? "alert" : "default"} to={ROUTES.escalations} linkLabel="Handle escalations" />}
+          {isManager && <StatCard label="Open escalations" value={show(openEscalations, tasksLoading)} hint="Overdue tasks waiting for a manager's decision" tone={openEscalations ? "alert" : "default"} to={ROUTES.escalations} linkLabel="Handle escalations" />}
           <StatCard
             label={isManager ? "Overdue tasks" : "My overdue tasks"}
             value={show(stats.overdue, tasksLoading)}

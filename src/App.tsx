@@ -1,9 +1,12 @@
 import { useAuthenticator } from "@aws-amplify/ui-react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import EmailVerificationGate from "./components/auth/EmailVerificationGate";
 import AppLayout from "./components/layout/AppLayout";
 import { UserProvider } from "./context/UserContext";
 import { PresenceProvider } from "./context/PresenceContext";
 import { useSignIn } from "./hooks/useSignIn";
+import { signOutUser } from "./services/authService";
+import AgentActivityPage from "./pages/AgentActivityPage";
 import DashboardPage from "./pages/DashboardPage";
 import EscalationsPage from "./pages/EscalationsPage";
 import LoginPage from "./pages/LoginPage";
@@ -30,6 +33,7 @@ function App() {
 
   if (authStatus === "authenticated") {
     return (
+      <EmailVerificationGate onSignOut={() => void signOutUser()}>
       <UserProvider>
        <PresenceProvider>
         <BrowserRouter>
@@ -42,6 +46,7 @@ function App() {
               <Route path={ROUTES.projectDetail} element={<ProjectDetailPage />} />
               <Route path={ROUTES.projectReports} element={<ReportsPage />} />
               <Route path={ROUTES.escalations} element={<EscalationsPage />} />
+              <Route path={ROUTES.agentActivity} element={<AgentActivityPage />} />
               <Route path={ROUTES.team} element={<TeamPage />} />
               <Route path={ROUTES.workload} element={<WorkloadPage />} />
               <Route path={ROUTES.memberDetail} element={<MemberDetailPage />} />
@@ -52,6 +57,7 @@ function App() {
         </BrowserRouter>
        </PresenceProvider>
       </UserProvider>
+      </EmailVerificationGate>
     );
   }
 

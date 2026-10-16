@@ -82,3 +82,22 @@ export const TOOL_LABELS: Record<AssistantTool, string> = {
 export function primaryAssistantRole(groups: readonly string[]): AssistantRole {
   return ASSISTANT_ROLES.find((role) => groups.includes(role)) ?? "VIEWER";
 }
+
+/** What each tool step is shown as in the agent's activity (server stream and UI history). */
+export const STEP_LABELS: Record<string, string> = {
+  getMyTasks: "Reading your tasks",
+  getProjectStatus: "Reading the project status",
+  getProjectTasks: "Reading the project's tasks",
+  getTaskDetails: "Reading the task",
+  getWeeklyReports: "Reading the weekly reports",
+  getTeamWorkload: "Computing the team's workload",
+  getRisksAndDelays: "Looking for risks and delays",
+  getEscalations: "Reading the escalations",
+  getAuditEvents: "Reading the audit trail",
+  getAgentActivity: "Reading the assistant's activity",
+  prepareAction: "Preparing an action for you to confirm",
+};
+
+/** Who the assistant is, as shown in "View agent activity". */
+export const AGENT_DESCRIPTION =
+  "Amazon Bedrock agent that answers questions about your projects with read-only tools limited to your role, and prepares changes you confirm yourself.";

@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import type { FormEvent, KeyboardEvent } from "react";
 import { ACTIONS_BY_ROLE, ASSISTANT_TOOLS, ROLE_ACCESS_SUMMARY, TOOL_LABELS, TOOL_ROLES } from "../../../amplify/functions/shared/assistantAccess";
 import type { AssistantRole } from "../../../amplify/functions/shared/assistantAccess";
@@ -8,9 +9,11 @@ import { useAssistantChat } from "../../hooks/useAssistantChat";
 import { useAssistantContext } from "../../hooks/useAssistantContext";
 import { assistantApiUrl } from "../../services/assistantService";
 import { ROLE_LABELS } from "../../utils/roles";
+import { ROUTES } from "../../utils/routes";
 import { CloseIcon, RefreshIcon, SendIcon, StopIcon } from "../ui/Icons";
 import type { AgentOrbState } from "./AgentOrb";
 import AgentOrb3D from "./AgentOrb3D";
+import ExecutionDetails from "./ExecutionDetails";
 
 const MANAGER_QUESTIONS = ["What are the risks on this project?", "Who is overloaded?", "Plan this project"];
 const SUGGESTED: Record<AssistantRole, readonly string[]> = {
@@ -62,16 +65,17 @@ function AssistantBubble({ message, onRetry, onConfirm, onCancel }: {
   onCancel: (entry: CardEntry) => void;
 }) {
   const streaming = message.status === "streaming";
+  const execution = message.execution;
+  const steps = execution?.steps.length ?? 0;
   return (
     <div className="chat-message chat-message--assistant">
-      {message.trace.length > 0 && (
-        <details className="chat-trace" open={streaming}>
-          <summary>Reasoning ({message.trace.length} step{message.trace.length === 1 ? "" : "s"})</summary>
-          <ol>
-            {message.trace.map((t, i) => (
-              <li key={`${t.step}-${i}`}>{t.label}</li>
-            ))}
-          </ol>
+      {execution && (
+        <details className="chat-trace">
+          <summary>
+            View agent activity ({steps === 0 ? (streaming ? "starting" : "no tool used") : `${steps} step${steps === 1 ? "" : "s"}`}
+            {streaming ? ", running" : ""})
+          </summary>
+          <ExecutionDetails execution={execution} live />
         </details>
       )}
       {message.text ? (
@@ -214,6 +218,9 @@ function AssistantPanel({ id, role, onClose, onOrbState }: AssistantPanelProps) 
             {chat.busy ? "Thinking…" : available ? "Ready" : "Not deployed yet"}
           </p>
         </div>
+        <Link className="text-button assistant-panel__history" to={ROUTES.agentActivity} onClick={onClose}>
+          Activity history
+        </Link>
         <button type="button" className="icon-button" onClick={chat.reset} aria-label="New conversation" title="New conversation" disabled={!chat.messages.length}>
           <RefreshIcon />
         </button>

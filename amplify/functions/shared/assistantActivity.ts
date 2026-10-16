@@ -23,6 +23,15 @@ export interface ActivityInput {
   durationMs: number;
   toolsCalled?: string[];
   guardrailInterventions?: number;
+  /** Execution record (kind SESSION): id, final status, timing and observable steps — no message text. */
+  executionId?: string;
+  status?: "COMPLETED" | "FAILED" | "RATE_LIMITED" | "STOPPED";
+  startedAt?: string;
+  steps?: { tool: string; status: string; summary: string; durationMs?: number }[];
+  /** Page the question was asked from (route and ids only). */
+  route?: string;
+  projectId?: string;
+  errorCode?: string;
 }
 
 export async function recordActivity(input: ActivityInput): Promise<void> {

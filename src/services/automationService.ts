@@ -48,12 +48,14 @@ export async function listOpenEscalations(): Promise<EscalationView[]> {
       daysLate: task?.dueDate ? Math.max(0, Math.floor((Date.parse(`${new Date().toISOString().slice(0, 10)}T00:00:00Z`) - Date.parse(`${task.dueDate}T00:00:00Z`)) / 86400000)) : 0,
     };
   }));
-  return views.sort((a, b) => (a.task?.dueDate ?? '').localeCompare(b.task?.dueDate ?? ''));
+  // Only escalations that still need a decision: their task exists and is still open.
+  return views.filter((v) => v.task && v.task.status !== 'DONE' && v.task.status !== 'CANCELLED').sort((a, b) => (a.task?.dueDate ?? '').localeCompare(b.task?.dueDate ?? ''));
 }
 
-export function observeOpenEscalationCount(onCount: (count: number) => void, onError: (error: unknown) => void): () => void {
+/** Live list of OPEN escalation records (see utils/escalations for which ones still need attention). */
+export function observeOpenEscalations(onItems: (items: Escalation[]) => void, onError: (error: unknown) => void): () => void {
   const sub = client.models.Escalation.observeQuery({ filter: { status: { eq: 'OPEN' } } }).subscribe({
-    next: ({ items }) => onCount(items.length),
+    next: ({ items }) => onItems([...items]),
     error: onError,
   });
   return () => sub.unsubscribe();

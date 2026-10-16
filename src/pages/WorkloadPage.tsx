@@ -10,7 +10,7 @@ import type { Task } from "../services/client";
 import { todayIsoDate } from "../utils/dates";
 import { ROUTES } from "../utils/routes";
 import { isOpenTask, isOverdue, rankAssignees } from "../utils/taskRules";
-import { computeWorkload } from "../utils/workload";
+import { computeWorkload, summariseWorkload } from "../utils/workload";
 
 /** Team workload (managers): load per member, overdue counts, and reassignment of overdue / overloaded work. */
 function WorkloadPage() {
@@ -50,14 +50,7 @@ function WorkloadPage() {
     [members, scoped, today],
   );
 
-  const summary = useMemo(() => {
-    const withCapacity = rows.filter((r) => r.workload.capacity > 0);
-    return {
-      overdue: scoped.filter((t) => isOverdue(t, today)).length,
-      overloaded: rows.filter((r) => r.workload.percent > 100).length,
-      average: withCapacity.length ? Math.round(withCapacity.reduce((sum, r) => sum + r.workload.percent, 0) / withCapacity.length) : 0,
-    };
-  }, [rows, scoped, today]);
+  const summary = useMemo(() => summariseWorkload(rows, scoped, today), [rows, scoped, today]);
 
   /** Other members, best skill match and lowest current load first (load counts every project). */
   const reassignOptions = (task: Task) =>
@@ -104,10 +97,19 @@ function WorkloadPage() {
   return (
     <div className="page-stack">
       <section aria-label="Summary">
-        <div className="stat-grid stat-grid--three">
+        <div className="stat-grid">
+          <StatCard
+            label="Open tasks"
+            value={loading ? "—" : String(summary.openTasks)}
+            hint={loading ? undefined : `${summary.blocked} blocked${summary.unassigned ? ` · ${summary.unassigned} unassigned` : ""}`}
+          />
           <StatCard label="Overdue tasks" value={loading ? "—" : String(summary.overdue)} tone={summary.overdue > 0 ? "alert" : "default"} />
           <StatCard label="Overloaded members" value={loading ? "—" : String(summary.overloaded)} hint="Above 100% of weekly capacity" tone={summary.overloaded > 0 ? "alert" : "default"} />
-          <StatCard label="Average load" value={loading ? "—" : `${summary.average}%`} hint="Open estimated hours vs capacity" />
+          <StatCard
+            label="Average load"
+            value={loading ? "—" : `${summary.average}%`}
+            hint={loading ? undefined : `Open estimated hours vs capacity${summary.withoutEstimate ? ` · ${summary.withoutEstimate} task${summary.withoutEstimate === 1 ? "" : "s"} without estimate not counted` : ""}`}
+          />
         </div>
       </section>
 

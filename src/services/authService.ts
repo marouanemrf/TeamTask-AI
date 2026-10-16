@@ -1,5 +1,5 @@
 import "./amplifyConfig";
-import { confirmSignIn, fetchAuthSession, signIn, signOut } from "aws-amplify/auth";
+import { confirmSignIn, confirmUserAttribute, fetchAuthSession, fetchUserAttributes, sendUserAttributeVerificationCode, signIn, signOut } from "aws-amplify/auth";
 import type { SignInOutput } from "aws-amplify/auth";
 
 /** Outcome of a sign-in step, reduced to what the UI needs to know. */
@@ -41,4 +41,36 @@ export async function getCurrentUserInfo(): Promise<CurrentUserInfo> {
     email: typeof email === "string" ? email : null,
     groups: Array.isArray(groups) ? groups.filter((g): g is string => typeof g === "string") : [],
   };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Email verification (Cognito user attribute verification)                    */
+/* -------------------------------------------------------------------------- */
+
+/** Whether Cognito considers the signed-in user's email verified (read from the user pool, not the token). */
+export async function isEmailVerified(): Promise<boolean> {
+  const attributes = await fetchUserAttributes();
+  return attributes.email_verified === "true";
+}
+
+/**
+ * Asks Cognito to email a one-time verification code to the user's address. Cognito generates the
+ * code, makes it expire (24 h) and single-use, and rate-limits sends (LimitExceededException).
+ * Resolves to the masked destination (e.g. "m***@g***"), never the code.
+ */
+export async function sendEmailVerificationCode(): Promise<string | undefined> {
+  const result = await sendUserAttributeVerificationCode({ userAttributeKey: "email" });
+  return result.destination;
+}
+
+/** Confirms the code from the email. Throws CodeMismatchException / ExpiredCodeException / LimitExceededException. */
+export async function confirmEmailVerificationCode(code: string): Promise<void> {
+  await confirmUserAttribute({ userAttributeKey: "email", confirmationCode: code });
+  // New tokens carry email_verified = true (the APIs check it). The email is verified even if this
+  // refresh fails: the tokens refresh on their own later, so the failure is only logged.
+  try {
+    await fetchAuthSession({ forceRefresh: true });
+  } catch (err) {
+    console.warn("[authService] Token refresh after verification failed", err);
+  }
 }

@@ -10,6 +10,7 @@ export const ROUTES = {
   team: "/team",
   workload: "/team/workload",
   escalations: "/escalations",
+  agentActivity: "/assistant/activity",
   projectReports: "/projects/:id/reports",
   memberDetail: "/team/:id",
 } as const;
@@ -34,6 +35,7 @@ const TITLES: ReadonlyArray<[string, string]> = [
   [ROUTES.projectDetail, "Project details"],
   [ROUTES.projectReports, "Weekly reports"],
   [ROUTES.escalations, "Open escalations"],
+  [ROUTES.agentActivity, "Agent activity"],
   [ROUTES.projects, "Projects"],
   [ROUTES.myTasks, "My tasks"],
   [ROUTES.workload, "Team workload"],

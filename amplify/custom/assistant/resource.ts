@@ -62,6 +62,10 @@ const TOOLS: Array<{ name: string; description: string; parameters?: Params }> =
 export interface AssistantProps {
   toolsFunction: IFunction;
   chatFunction: IFunction;
+  /** POST /profile/career-suggestions (Bedrock Converse on the caller's own profile). */
+  careerFunction: IFunction;
+  /** GET /assistant/executions (recorded executions: own, or the organisation's for ADMIN). */
+  activityFunction: IFunction;
   userPool: IUserPool;
   /** The data API's tables, by model name. */
   tables: Record<string, ITable>;
@@ -223,7 +227,7 @@ export function defineAssistant(props: AssistantProps) {
         status: '$context.status', latencyMs: '$context.responseLatency', user: '$context.authorizer.claims.sub', error: '$context.error.message',
       })),
     },
-    defaultCorsPreflightOptions: { allowOrigins: props.allowedOrigins, allowMethods: ['POST', 'OPTIONS'], allowHeaders: ['Content-Type', 'Authorization'], maxAge: Duration.hours(1) },
+    defaultCorsPreflightOptions: { allowOrigins: props.allowedOrigins, allowMethods: ['GET', 'POST', 'OPTIONS'], allowHeaders: ['Content-Type', 'Authorization'], maxAge: Duration.hours(1) },
   });
   // Errors produced by API Gateway itself (401, 429, 400) must carry CORS headers too.
   for (const type of [ResponseType.DEFAULT_4XX, ResponseType.DEFAULT_5XX]) {
@@ -243,7 +247,8 @@ export function defineAssistant(props: AssistantProps) {
       },
     },
   });
-  api.root.addResource('assistant').addResource('chat').addMethod(
+  const assistantResource = api.root.addResource('assistant');
+  assistantResource.addResource('chat').addMethod(
     'POST',
     new LambdaIntegration(props.chatFunction, { proxy: true, responseTransferMode: ResponseTransferMode.STREAM, timeout: Duration.minutes(2) }),
     {
@@ -252,6 +257,51 @@ export function defineAssistant(props: AssistantProps) {
       requestModels: { 'application/json': chatModel },
     },
   );
+
+  assistantResource.addResource('executions').addMethod('GET', new LambdaIntegration(props.activityFunction, { proxy: true }), {
+    authorizer,
+    requestParameters: { 'method.request.querystring.days': false },
+  });
+  api.root.addResource('profile').addResource('career-suggestions').addMethod('POST', new LambdaIntegration(props.careerFunction, { proxy: true, timeout: Duration.seconds(29) }), { authorizer });
+
+  // Career suggestions: own counter under RATE#, read-only on the profile tables, the model and guardrail.
+  props.careerFunction.addToRolePolicy(new PolicyStatement({
+    actions: ['dynamodb:UpdateItem'],
+    resources: [table.tableArn],
+    conditions: { 'ForAllValues:StringLike': { 'dynamodb:LeadingKeys': ['RATE#career#*'] } },
+  }));
+  for (const name of ['TeamMember', 'Task']) props.careerFunction.addToRolePolicy(new PolicyStatement({ actions: ['dynamodb:Scan'], resources: [props.tables[name].tableArn] }));
+  props.careerFunction.addToRolePolicy(new PolicyStatement({ actions: ['dynamodb:GetItem'], resources: [props.tables.Project.tableArn] }));
+  props.careerFunction.addToRolePolicy(new PolicyStatement({
+    actions: ['bedrock:InvokeModel', 'bedrock:GetInferenceProfile'],
+    resources: [`arn:aws:bedrock:${stack.region}:${stack.account}:inference-profile/${props.modelId}`, `arn:aws:bedrock:*::foundation-model/${baseModel}`],
+  }));
+  props.careerFunction.addToRolePolicy(new PolicyStatement({ actions: ['bedrock:ApplyGuardrail'], resources: [guardrail.attrGuardrailArn] }));
+
+  // Activity: read the organisation's execution records (ORG# keys) and the caller's organisation.
+  props.activityFunction.addToRolePolicy(new PolicyStatement({
+    actions: ['dynamodb:Query'],
+    resources: [table.tableArn],
+    conditions: { 'ForAllValues:StringLike': { 'dynamodb:LeadingKeys': ['ORG#*'] } },
+  }));
+  for (const name of ['TeamMember', 'Organisation']) props.activityFunction.addToRolePolicy(new PolicyStatement({ actions: ['dynamodb:Scan'], resources: [props.tables[name].tableArn] }));
+
+  const careerEnv: Record<string, string> = {
+    ASSISTANT_TABLE: table.tableName,
+    TABLE_TEAMMEMBER: props.tables.TeamMember.tableName,
+    TABLE_TASK: props.tables.Task.tableName,
+    TABLE_PROJECT: props.tables.Project.tableName,
+    MODEL_ID: props.modelId,
+    GUARDRAIL_ID: guardrail.attrGuardrailId,
+    GUARDRAIL_VERSION: guardrailVersion.attrVersion,
+    ALLOWED_ORIGINS: props.allowedOrigins.join(','),
+  };
+  const activityEnv: Record<string, string> = {
+    ASSISTANT_TABLE: table.tableName,
+    TABLE_TEAMMEMBER: props.tables.TeamMember.tableName,
+    TABLE_ORGANISATION: props.tables.Organisation.tableName,
+    ALLOWED_ORIGINS: props.allowedOrigins.join(','),
+  };
 
   const chatEnv: Record<string, string> = {
     AGENT_ID: agent.attrAgentId,
@@ -263,6 +313,6 @@ export function defineAssistant(props: AssistantProps) {
   };
 
   new CfnOutput(stack, 'TeamTaskApiUrl', { value: api.url });
-  // Environment variables for the two functions (applied in backend.ts with addEnvironment).
-  return { api, agent, alias, table, guardrail, toolsEnv, chatEnv };
+  // Environment variables for the functions (applied in backend.ts with addEnvironment).
+  return { api, agent, alias, table, guardrail, toolsEnv, chatEnv, careerEnv, activityEnv };
 }

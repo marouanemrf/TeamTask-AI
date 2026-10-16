@@ -17,6 +17,8 @@ import { manageProfileFunction } from './functions/manage-profile/resource';
 import { presenceFunction } from './functions/presence/resource';
 import { assistantChatFunction } from './functions/assistant-chat/resource';
 import { assistantToolsFunction } from './functions/assistant-tools/resource';
+import { assistantActivityFunction } from './functions/assistant-activity/resource';
+import { careerSuggestionsFunction } from './functions/career-suggestions/resource';
 import { DEFAULT_ASSISTANT_MODEL, defineAssistant } from './custom/assistant/resource';
 import { storage } from './storage/resource';
 
@@ -43,6 +45,8 @@ const backend = defineBackend({
   presenceFunction,
   assistantChatFunction,
   assistantToolsFunction,
+  assistantActivityFunction,
+  careerSuggestionsFunction,
 });
 
 // Internal tool: disable self sign-up. Accounts are created by an administrator only.
@@ -114,6 +118,8 @@ const hostingOrigin = process.env.AWS_BRANCH && process.env.AWS_APP_ID ? `https:
 const assistant = defineAssistant({
   toolsFunction: backend.assistantToolsFunction.resources.lambda,
   chatFunction: backend.assistantChatFunction.resources.lambda,
+  careerFunction: backend.careerSuggestionsFunction.resources.lambda,
+  activityFunction: backend.assistantActivityFunction.resources.lambda,
   userPool: backend.auth.resources.userPool,
   tables: backend.data.resources.tables,
   deployment: process.env.AWS_BRANCH ?? 'sandbox',
@@ -122,4 +128,6 @@ const assistant = defineAssistant({
 });
 for (const [key, value] of Object.entries(assistant.toolsEnv)) backend.assistantToolsFunction.addEnvironment(key, value);
 for (const [key, value] of Object.entries(assistant.chatEnv)) backend.assistantChatFunction.addEnvironment(key, value);
+for (const [key, value] of Object.entries(assistant.careerEnv)) backend.careerSuggestionsFunction.addEnvironment(key, value);
+for (const [key, value] of Object.entries(assistant.activityEnv)) backend.assistantActivityFunction.addEnvironment(key, value);
 backend.addOutput({ custom: { teamtaskApi: { url: assistant.api.url } } });

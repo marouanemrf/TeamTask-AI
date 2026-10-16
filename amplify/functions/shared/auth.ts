@@ -17,7 +17,8 @@ interface CognitoIdentityLike {
 }
 
 const cognito = new CognitoIdentityProviderClient({});
-// username → email, kept for the lifetime of the Lambda container.
+// username → email of VERIFIED accounts, kept for the lifetime of the Lambda container
+// (unverified accounts are looked up again, so a fresh verification takes effect immediately).
 const emailCache = new Map<string, string>();
 
 /**
@@ -26,7 +27,11 @@ const emailCache = new Map<string, string>();
  */
 async function emailFor(identity: CognitoIdentityLike, username: string): Promise<string> {
   const claimed = identity.claims?.email;
-  if (typeof claimed === "string" && claimed) return claimed.toLowerCase();
+  if (typeof claimed === "string" && claimed) {
+    // ID token: the claim says whether the email is verified.
+    if (String(identity.claims?.email_verified) !== "true") fail("FORBIDDEN", UNVERIFIED);
+    return claimed.toLowerCase();
+  }
 
   const cached = emailCache.get(username);
   if (cached) return cached;
@@ -34,11 +39,15 @@ async function emailFor(identity: CognitoIdentityLike, username: string): Promis
   const userPoolId = process.env.USER_POOL_ID;
   if (!userPoolId) throw new Error("USER_POOL_ID is not configured");
   const user = await cognito.send(new AdminGetUserCommand({ UserPoolId: userPoolId, Username: username }));
-  const email = user.UserAttributes?.find((a) => a.Name === "email")?.Value?.toLowerCase();
+  const attribute = (name: string) => user.UserAttributes?.find((a) => a.Name === name)?.Value;
+  const email = attribute("email")?.toLowerCase();
   if (!email) fail("FORBIDDEN", "Your account has no email address.");
+  if (attribute("email_verified") !== "true") fail("FORBIDDEN", UNVERIFIED);
   emailCache.set(username, email);
   return email;
 }
+
+const UNVERIFIED = "Verify your email address before using TeamTask.";
 
 /** Caller from the AppSync identity: Cognito username, email and roles (no group = VIEWER). */
 export async function getCaller(identity: unknown): Promise<Caller> {

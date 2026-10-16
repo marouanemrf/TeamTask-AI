@@ -32,8 +32,6 @@ function ProjectForm({ defaultManagerEmail, submitting, error, onSubmit, onCance
     status: "DRAFT",
     managerEmail: defaultManagerEmail,
     businessImpact: undefined,
-    importanceOverride: undefined,
-    urgencyOverride: undefined,
   });
   const [errors, setErrors] = useState<ProjectFormErrors>({});
   const [submitted, setSubmitted] = useState(false);
@@ -108,10 +106,9 @@ function ProjectForm({ defaultManagerEmail, submitting, error, onSubmit, onCance
           {fieldError("name")}
         </div>
 
-        <div className="modal__row project-form__full">
+        <div className="project-form__full">
+          {/* Importance and urgency are computed (Eisenhower matrix); managers can still override them in the project settings. */}
           <label className="form-field"><span className="form-field__label">Business impact</span><select className="form-input" value={values.businessImpact ?? ""} onChange={(e) => setValues({ ...values, businessImpact: (e.target.value || undefined) as ProjectFormValues["businessImpact"] })}><option value="">Not assessed</option><option value="LOW">Low</option><option value="MEDIUM">Medium</option><option value="HIGH">High</option><option value="CRITICAL">Critical</option></select></label>
-          <label className="form-field"><span className="form-field__label">Importance override (1–5)</span><select className="form-input" value={values.importanceOverride ?? ""} onChange={(e) => setValues({ ...values, importanceOverride: e.target.value ? Number(e.target.value) : undefined })}><option value="">Automatic / unknown</option>{[1,2,3,4,5].map((n) => <option key={n} value={n}>{n}</option>)}</select></label>
-          <label className="form-field"><span className="form-field__label">Urgency override (1–5)</span><select className="form-input" value={values.urgencyOverride ?? ""} onChange={(e) => setValues({ ...values, urgencyOverride: e.target.value ? Number(e.target.value) : undefined })}><option value="">Automatic / unknown</option>{[1,2,3,4,5].map((n) => <option key={n} value={n}>{n}</option>)}</select></label>
         </div>
 
         <div className="form-field">

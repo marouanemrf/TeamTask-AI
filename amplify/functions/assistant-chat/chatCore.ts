@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { primaryAssistantRole } from "../shared/assistantAccess";
+import { primaryAssistantRole, STEP_LABELS } from "../shared/assistantAccess";
 import type { AssistantRole } from "../shared/assistantAccess";
 
 /** Pure parts of POST /assistant/chat (identity, validation, session, stream mapping), unit-tested. */
@@ -11,6 +11,8 @@ const ID = /^[A-Za-z0-9:_-]{1,128}$/;
 export interface Identity {
   userId: string;
   email: string;
+  /** email_verified claim of the ID token. */
+  emailVerified: boolean;
   role: AssistantRole;
   groups: string[];
 }
@@ -25,7 +27,7 @@ export function identityFromClaims(claims: Record<string, unknown> | undefined):
   if (!userId || !email) return null;
   const raw = claims?.["cognito:groups"];
   const groups = (Array.isArray(raw) ? raw.map(String) : typeof raw === "string" ? raw.replace(/[[\]]/g, "").split(/[\s,]+/) : []).filter(Boolean);
-  return { userId, email, role: primaryAssistantRole(groups), groups };
+  return { userId, email, emailVerified: String(claims?.email_verified) === "true", role: primaryAssistantRole(groups), groups };
 }
 
 export interface ChatRequest {
@@ -68,26 +70,31 @@ export const rateKey = (userId: string, now = new Date()) => ({ pk: `RATE#${user
 
 /* ------------------------- stream event mapping ------------------------- */
 
+export type StepStatus = "RUNNING" | "OK" | "FORBIDDEN" | "INVALID" | "ERROR";
+
+/** One observable step of an execution: a tool call and its outcome (never the model's hidden reasoning). */
+export interface ExecutionStep {
+  tool: string;
+  label: string;
+  status: StepStatus;
+  /** Short, content-free description of the outcome ("3 results", "Access refused for your role"). */
+  summary: string;
+  startedAt: string;
+  durationMs?: number;
+}
+
 export type ClientEvent =
+  | { type: "execution"; executionId: string; agent: string; startedAt: string }
   | { type: "chunk"; text: string }
-  | { type: "trace"; step: string; label: string }
+  | { type: "step"; step: ExecutionStep }
+  | { type: "guardrail" }
   | { type: "action"; card: unknown }
   | { type: "error"; code: string; message: string }
-  | { type: "done" };
+  | { type: "done"; status: "COMPLETED" | "FAILED"; durationMs: number };
 
-const TOOL_LABELS: Record<string, string> = {
-  getMyTasks: "Reading your tasks",
-  getProjectStatus: "Reading the project status",
-  getProjectTasks: "Reading the project's tasks",
-  getTaskDetails: "Reading the task",
-  getWeeklyReports: "Reading the weekly reports",
-  getTeamWorkload: "Computing the team's workload",
-  getRisksAndDelays: "Looking for risks and delays",
-  getEscalations: "Reading the escalations",
-  getAuditEvents: "Reading the audit trail",
-  getAgentActivity: "Reading the assistant's activity",
-  prepareAction: "Preparing an action for you to confirm",
-};
+export const AGENT_NAME = "TeamTask Assistant";
+
+export const TOOL_LABELS = STEP_LABELS;
 
 interface TracePart {
   orchestrationTrace?: {
@@ -97,24 +104,63 @@ interface TracePart {
   guardrailTrace?: { action?: string };
 }
 
-/**
- * Turns one InvokeAgent trace into client events. Action cards are taken ONLY from tool outputs
- * (prepareAction results), never from the model's text, so the model can't forge a card.
- */
-export function traceToEvents(trace: TracePart | undefined): { events: ClientEvent[]; tool?: string; guardrail: boolean } {
-  const events: ClientEvent[] = [];
-  const fn = trace?.orchestrationTrace?.invocationInput?.actionGroupInvocationInput?.function;
-  if (fn) events.push({ type: "trace", step: fn, label: TOOL_LABELS[fn] ?? "Using a tool" });
-  const output = trace?.orchestrationTrace?.observation?.actionGroupInvocationOutput?.text;
-  if (output) {
-    try {
-      const parsed = JSON.parse(output) as { status?: string; data?: { card?: unknown } };
-      if (parsed.status === "OK" && parsed.data?.card) events.push({ type: "action", card: parsed.data.card });
-    } catch {
-      /* not a tool result we produce */
-    }
+/** Status and a content-free summary of a tool result (counts, refusal, card) — never the data itself. */
+export function summariseToolOutput(text: string | undefined): { status: StepStatus; summary: string; card?: unknown } {
+  let parsed: { status?: string; data?: unknown; message?: string };
+  try {
+    parsed = JSON.parse(text ?? "");
+  } catch {
+    return { status: "ERROR", summary: "Unreadable tool result" };
   }
-  const guardrail = trace?.guardrailTrace?.action === "INTERVENED";
-  if (guardrail) events.push({ type: "trace", step: "guardrail", label: "Safety filter applied" });
-  return { events, tool: fn, guardrail };
+  if (parsed.status === "FORBIDDEN") return { status: "FORBIDDEN", summary: "Access refused for your role" };
+  if (parsed.status === "INVALID") return { status: "INVALID", summary: `Request rejected: ${String(parsed.message ?? "invalid parameters").slice(0, 160)}` };
+  if (parsed.status !== "OK") return { status: "ERROR", summary: "The data couldn't be read" };
+  const data = parsed.data as { card?: unknown; tasks?: unknown[] } | unknown[] | null;
+  if (data && !Array.isArray(data) && typeof data === "object" && "card" in data && data.card) return { status: "OK", summary: "Action card prepared (waiting for your confirmation)", card: data.card };
+  const count = Array.isArray(data) ? data.length : Array.isArray((data as { tasks?: unknown[] } | null)?.tasks) ? (data as { tasks: unknown[] }).tasks.length : null;
+  return { status: "OK", summary: count === null ? "Data returned" : `${count} result${count === 1 ? "" : "s"}` };
+}
+
+/**
+ * Follows one InvokeAgent stream: pairs each tool call with its result into steps (with status,
+ * summary and duration), counts guardrail interventions, and takes action cards ONLY from tool
+ * outputs (prepareAction results), never from the model's text, so the model can't forge a card.
+ */
+export class ExecutionTracker {
+  readonly steps: ExecutionStep[] = [];
+  guardrailInterventions = 0;
+  private open: { step: ExecutionStep; t0: number } | null = null;
+
+  constructor(private readonly clock: () => number = Date.now) {}
+
+  handle(trace: TracePart | undefined): ClientEvent[] {
+    const events: ClientEvent[] = [];
+    const fn = trace?.orchestrationTrace?.invocationInput?.actionGroupInvocationInput?.function;
+    if (fn) {
+      const t0 = this.clock();
+      const step: ExecutionStep = { tool: fn, label: TOOL_LABELS[fn] ?? "Using a tool", status: "RUNNING", summary: "Running…", startedAt: new Date(t0).toISOString() };
+      this.steps.push(step);
+      this.open = { step, t0 };
+      events.push({ type: "step", step: { ...step } });
+    }
+    const output = trace?.orchestrationTrace?.observation?.actionGroupInvocationOutput;
+    if (output) {
+      const result = summariseToolOutput(output.text);
+      if (this.open) {
+        Object.assign(this.open.step, { status: result.status, summary: result.summary, durationMs: this.clock() - this.open.t0 });
+        events.push({ type: "step", step: { ...this.open.step } });
+        this.open = null;
+      }
+      if (result.card) events.push({ type: "action", card: result.card });
+    }
+    if (trace?.guardrailTrace?.action === "INTERVENED") {
+      this.guardrailInterventions += 1;
+      events.push({ type: "guardrail" });
+    }
+    return events;
+  }
+
+  get toolsCalled(): string[] {
+    return this.steps.map((s) => s.tool);
+  }
 }

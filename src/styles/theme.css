@@ -1789,10 +1789,19 @@ img.avatar {
   background: rgba(5, 8, 18, 0.7);
 }
 
-.modal__form {
+/* The open dialog is a flex column and the form shrinks inside it: only .modal__scroll scrolls.
+   (Inheriting the dialog's max-height made the form 2px taller than the dialog's content box —
+   its border — so the dialog itself scrolled too, and its scrollbar caused a horizontal one.) */
+.modal[open] {
   display: flex;
   flex-direction: column;
-  max-height: inherit;
+}
+
+.modal__form {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .modal__header {
@@ -3125,3 +3134,35 @@ img.avatar {
 }
 
 .drawer__assistant { margin-left: auto; }
+
+/* Email verification screen (login card) */
+.login-card__actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3); margin-top: var(--space-4); }
+
+/* Agent execution details (assistant panel and Agent activity page) */
+.execution { display: grid; gap: var(--space-2); margin-top: var(--space-2); font-size: var(--font-size-sm); }
+.execution__facts { display: grid; gap: 4px; margin: 0; }
+.execution__facts > div { display: grid; grid-template-columns: 6.5rem 1fr; gap: var(--space-2); }
+.execution__facts dt { color: var(--color-muted); }
+.execution__facts dd { margin: 0; overflow-wrap: anywhere; }
+.execution__role { display: block; color: var(--color-muted); font-size: var(--font-size-xs); }
+.execution__status { font-weight: 600; }
+.execution__status--completed { color: var(--color-success); }
+.execution__status--failed, .execution__status--rate_limited { color: var(--color-error); }
+.execution__status--running { color: #8DB8FA; }
+.execution__status--stopped { color: var(--color-muted); }
+.execution__live { color: var(--color-muted); }
+.execution__heading { margin: var(--space-2) 0 0; font-size: var(--font-size-sm); }
+.execution__steps { display: grid; gap: var(--space-2); margin: 0; padding-left: 1.2rem; }
+.execution__step { display: grid; gap: 2px; }
+.execution__step-title { font-weight: 600; }
+.execution__step-meta, .execution__step-summary { color: var(--color-muted); font-size: var(--font-size-xs); }
+.execution__step--forbidden .execution__step-meta, .execution__step--error .execution__step-meta, .execution__step--invalid .execution__step-meta { color: var(--color-error); }
+.assistant-panel__history { white-space: nowrap; }
+
+.agent-activity__filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-2); }
+.agent-activity__filters .form-field__label { width: 100%; }
+.agent-activity__filters .form-input { width: auto; min-width: 12rem; }
+/* Links/buttons inside the white CV paper need a darker teal for AA contrast */
+.cv-preview__suggestions .text-button { color: #0a6b5b; }
+.cv-preview__suggestions .chip--ai { color: #5b21b6; border-color: #c4b5fd; background: #f5f3ff; }
+.cv-preview__suggestions .chat-error { color: #b42318; }

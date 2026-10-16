@@ -1,17 +1,17 @@
-import "./amplifyConfig";
-import { fetchAuthSession } from "aws-amplify/auth";
-import outputs from "../../amplify_outputs.json";
 import type { ActionType } from "../../amplify/functions/shared/assistantAccess";
 import { ApiError } from "./apiError";
+import { API_UNAVAILABLE, authorizedFetch, restApiUrl } from "./restApi";
 
 /**
  * Client of the TeamTask assistant: POST {apiUrl}/assistant/chat with the user's Cognito ID token.
  * The answer streams as one JSON object per line (NDJSON):
+ *   { "type": "execution", "executionId", "agent", "startedAt" }    first line
+ *   { "type": "step", "step": { tool, label, status, summary, startedAt, durationMs? } }   a tool call, then its outcome
  *   { "type": "chunk", "text": "…" }
- *   { "type": "trace", "step": "getTeamWorkload", "label": "Computing the team's workload" }
  *   { "type": "action", "card": ActionCard }    a change the user may confirm (never applied by the assistant)
- *   { "type": "error", "code": "…", "message": "…" }
- *   { "type": "done" }
+ *   { "type": "guardrail" }                      the safety filter intervened
+ *   { "type": "error", "code", "message" }
+ *   { "type": "done", "status": "COMPLETED" | "FAILED", "durationMs" }
  * Identity and permissions come from the token on the server; the body carries only the message and
  * the page the user is on.
  */
@@ -23,12 +23,23 @@ export interface ActionCard {
   params: Record<string, string>;
 }
 
+export interface ExecutionStep {
+  tool: string;
+  label: string;
+  status: "RUNNING" | "OK" | "FORBIDDEN" | "INVALID" | "ERROR";
+  summary: string;
+  startedAt: string;
+  durationMs?: number;
+}
+
 export type AssistantEvent =
+  | { type: "execution"; executionId: string; agent: string; startedAt: string }
+  | { type: "step"; step: ExecutionStep }
   | { type: "chunk"; text: string }
-  | { type: "trace"; step: string; label: string }
   | { type: "action"; card: ActionCard }
+  | { type: "guardrail" }
   | { type: "error"; code: string; message: string }
-  | { type: "done" };
+  | { type: "done"; status: "COMPLETED" | "FAILED"; durationMs: number };
 
 export interface PageContext {
   route: string;
@@ -36,48 +47,21 @@ export interface PageContext {
   taskId?: string;
 }
 
-export const ASSISTANT_UNAVAILABLE = "ASSISTANT_UNAVAILABLE";
-
-interface ApiOutputs {
-  custom?: { teamtaskApi?: { url?: string } };
-}
-
-/** REST API base URL: amplify_outputs.json (custom.teamtaskApi.url), or VITE_API_URL to target another stage. */
-export function assistantApiUrl(): string | null {
-  const fromEnv = import.meta.env.VITE_API_URL as string | undefined;
-  const url = fromEnv || (outputs as ApiOutputs).custom?.teamtaskApi?.url;
-  return url ? url.replace(/\/$/, "") : null;
-}
+export const ASSISTANT_UNAVAILABLE = API_UNAVAILABLE;
+export const assistantApiUrl = restApiUrl;
 
 export async function streamAssistantChat(
   input: { message: string; conversationId: string; pageContext: PageContext },
   onEvent: (event: AssistantEvent) => void,
   signal?: AbortSignal,
 ): Promise<void> {
-  const base = assistantApiUrl();
-  if (!base) throw new ApiError("The assistant isn't deployed in this environment yet.", ASSISTANT_UNAVAILABLE);
-  const { tokens } = await fetchAuthSession();
-  const token = tokens?.idToken?.toString();
-  if (!token) throw new ApiError("Your session has expired. Sign in again.", "HTTP_401");
-
-  const response = await fetch(`${base}/assistant/chat`, {
+  const response = await authorizedFetch("/assistant/chat", {
     method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "application/x-ndjson", Authorization: token },
+    headers: { "Content-Type": "application/json", Accept: "application/x-ndjson" },
     body: JSON.stringify(input),
     signal,
   });
-  if (!response.ok || !response.body) {
-    let body: { error?: { code?: string; message?: string }; message?: string } = {};
-    try {
-      body = await response.json();
-    } catch {
-      /* not JSON */
-    }
-    const message =
-      body.error?.message ??
-      (response.status === 429 ? "You've sent too many messages. Try again later." : response.status === 401 ? "Your session has expired. Sign in again." : `The assistant request failed (${response.status}).`);
-    throw new ApiError(message, `HTTP_${response.status}`);
-  }
+  if (!response.body) throw new ApiError("The assistant sent an empty answer.", "HTTP_502");
 
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
