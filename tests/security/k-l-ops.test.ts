@@ -10,7 +10,7 @@ describe.skipIf(!enabled)("k. notification failure and recovery", () => {
   it("unverified recipient → Reminder FAILED and the run continues", async () => {
     const tomorrow = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
     const created = await as("A_PM", M.addTask, { clientRequestId: uuid(), projectId: fx.projects.A.id, title: "sec reminder failure", dueDate: tomorrow, assigneeId: fx.users.A_MEMBER.memberId });
-    const taskId = (created.data?.addTask as { id: string }).id;
+    const taskId = (created.data?.addTask as { id: string } | undefined)?.id ?? "";
     const name = fnName("deadlinecheck");
     const out = JSON.parse(aws(["lambda", "invoke", "--function-name", name, "--payload", "e30=", "--log-type", "None", join(tmpdir(), "sec-deadline-out.json")])) as { StatusCode: number; FunctionError?: string };
     const reminders = await as("A_ADMIN", `query ($t: ID!) { listReminders(filter: { taskId: { eq: $t } }, limit: 1000) { items { status recipientEmail } } }`, { t: taskId });

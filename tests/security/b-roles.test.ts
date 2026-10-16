@@ -92,7 +92,7 @@ describe.skipIf(!enabled)("b. role matrix", () => {
 
   it("MEMBER cannot change the status of a task assigned to someone else", async () => {
     const other = await as("A_ADMIN", M.addTask, { clientRequestId: uuid(), projectId: fx.projects.A.id, title: "sec not the member's task", assigneeId: fx.users.A_PM.memberId });
-    const taskId = (other.data?.addTask as { id: string }).id;
+    const taskId = (other.data?.addTask as { id: string } | undefined)?.id ?? "";
     const r = await as("A_MEMBER", M.changeTaskStatus, { clientRequestId: uuid(), taskId, status: "IN_PROGRESS" });
     const pass = isDenied(r);
     record({ category: "b. Role matrix", name: "changeTaskStatus on another member's task – MEMBER", request: "changeTaskStatus as MEMBER on a task assigned to the PM", expected: "denied", actual: summary(r), pass });

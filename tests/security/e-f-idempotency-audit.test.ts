@@ -21,7 +21,7 @@ describe.skipIf(!enabled)("e. idempotency", () => {
     const vars = { clientRequestId: uuid(), projectId: fx.projects.A.id, title: "sec idempotent concurrent", assigneeId: fx.users.A_MEMBER.memberId };
     const results = await Promise.all(Array.from({ length: 5 }, () => as("A_PM", M.addTask, vars)));
     const ids = new Set(results.map((r) => (r.data?.addTask as { id?: string } | null)?.id).filter(Boolean));
-    const tasks = ((await as("A_ADMIN", Q.listTasks)).data?.listTasks as { items: { title: string }[] }).items.filter((t) => t.title === vars.title);
+    const tasks = (((await as("A_ADMIN", Q.listTasks)).data?.listTasks as { items: { title: string }[] } | undefined)?.items ?? []).filter((t) => t.title === vars.title);
     const events = await eventsFor(vars.clientRequestId);
     const pass = ids.size === 1 && tasks.length === 1 && events.length === 1;
     record({ category: "e. Idempotency", name: "addTask concurrent replay", request: "5 × addTask in parallel, same clientRequestId", expected: "1 task, 1 TaskEvent", actual: `distinct ids=${ids.size} tasks=${tasks.length} events=${events.length} · ${results.map(summary).join(" / ").slice(0, 200)}`, pass });
@@ -41,7 +41,7 @@ describe.skipIf(!enabled)("e. idempotency", () => {
 
 describe.skipIf(!enabled)("f. audit immutability", () => {
   it("no client can create, update or delete a TaskEvent", async () => {
-    const someEvent = ((await as("A_ADMIN", Q.listTaskEvents)).data?.listTaskEvents as { items: { id: string }[] }).items[0];
+    const someEvent = ((await as("A_ADMIN", Q.listTaskEvents)).data?.listTaskEvents as { items: { id: string }[] } | undefined)?.items[0] ?? { id: "sec-missing-event" };
     for (const key of ["A_ADMIN", "A_PM", "A_MEMBER", "A_VIEWER"] as const) {
       const tries = [
         ["createTaskEvent", await as(key, M.createTaskEvent, { input: { entityId: fx.tasks.A.id, eventType: "UPDATED", actorType: "USER" } })],

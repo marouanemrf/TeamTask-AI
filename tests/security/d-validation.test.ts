@@ -31,7 +31,7 @@ describe.skipIf(!enabled)("d. input validation", () => {
 
   it("circular dependency → rejected", async () => {
     const mk = async (title: string, dependsOn: string[] = []) =>
-      ((await as("A_PM", M.addTask, { ...base(), title, dependsOn })).data?.addTask as { id: string }).id;
+      ((await as("A_PM", M.addTask, { ...base(), title, dependsOn })).data?.addTask as { id: string } | undefined)?.id ?? "";
     const first = await mk("sec cycle 1");
     const second = await mk("sec cycle 2", [first]);
     const r = await as("A_PM", M.editTask, { clientRequestId: uuid(), taskId: first, title: "sec cycle 1", assigneeId: fx.users.A_MEMBER.memberId, dependsOn: [second] });

@@ -36,7 +36,7 @@ export const handler: Schema['manageTeamMember']['functionHandler'] = (event) =>
     if (!roles.length || roles.some((r) => !(VALID as readonly string[]).includes(r)) || new Set(roles).size !== roles.length) fail('VALIDATION', 'Select one or more valid roles.');
     if (!caller.roles.includes('ADMIN') && roles.some((r) => r === 'ADMIN' || r === 'PROJECT_MANAGER')) fail('FORBIDDEN', 'Only an administrator can grant the Admin or Project manager roles.');
     const capacity = input.weeklyCapacityHours ?? 40;
-    if ((input.skills ?? []).length > 30 || (input.jobTitle?.length ?? 0) > 200 || (input.avatarKey && !/^(?:avatars\/[A-Za-z0-9._-]+|profile-avatars\/[A-Za-z0-9:_-]+\/[A-Za-z0-9._-]+)$/.test(input.avatarKey))) fail('VALIDATION', 'Intitulé, photo ou nombre de compétences invalide.');
+    if ((input.skills ?? []).length > 30 || (input.jobTitle?.length ?? 0) > 200 || (input.avatarKey && !/^(?:avatars\/[A-Za-z0-9._-]+|profile-avatars\/[A-Za-z0-9:_-]+\/[A-Za-z0-9._-]+)$/.test(input.avatarKey))) fail('VALIDATION', 'Invalid job title, photo or number of skills.');
     if (!Number.isInteger(capacity) || capacity < 1 || capacity > 60 || (input.skills ?? []).some((s) => !s?.trim() || s.length > 80)) fail('VALIDATION', 'Invalid capacity or skills.');
     if (action === 'CREATE') {
       if (!input.organisationId) fail('VALIDATION', 'Organisation obligatoire.');
@@ -61,13 +61,18 @@ export const handler: Schema['manageTeamMember']['functionHandler'] = (event) =>
         throw error;
       }
     }
-    if (!input.memberId) fail('VALIDATION', 'Identifiant du membre obligatoire.');
+    if (!input.memberId) fail('VALIDATION', 'The member id is required.');
     const before = check(await db.models.TeamMember.get({ id: input.memberId }), 'TeamMember.get');
-    if (!before) fail('NOT_FOUND', 'Ce membre n’existe plus.');
+    if (!before) fail('NOT_FOUND', 'This member no longer exists.');
     await ensureOrganisationAccess(before.organisationId, caller.email, caller.roles);
     const priorRoles = (before.roles?.length ? before.roles : [before.role ?? 'VIEWER']).filter((role): role is string => !!role);
     if (priorRoles.some((r) => r === 'ADMIN' || r === 'PROJECT_MANAGER') && !caller.roles.includes('ADMIN')) fail('FORBIDDEN', "Only an administrator can edit or delete a manager's account.");
-    if (normalizeEmail(before.email ?? '') === caller.email) fail('FORBIDDEN', 'Vous ne pouvez pas supprimer ou modifier votre propre compte ici.');
+    // Administrators manage their own record too, but can't remove their own ADMIN role (no lock-out).
+    // Other managers can't edit their own account here (they use their profile page).
+    if (normalizeEmail(before.email ?? '') === caller.email) {
+      if (!caller.roles.includes('ADMIN')) fail('FORBIDDEN', "You can't edit your own account here. Use your profile page.");
+      if (!roles.includes('ADMIN')) fail('VALIDATION', "You can't remove your own Admin role.");
+    }
     if (normalizeEmail(before.email) !== email) fail('VALIDATION', "The email address of an existing account can't be changed.");
     const accountEmail = normalizeEmail(before.email ?? '');
     const existingRoles = priorRoles;
@@ -75,7 +80,7 @@ export const handler: Schema['manageTeamMember']['functionHandler'] = (event) =>
       for (const role of existingRoles) if (!roles.includes(role)) await cognito.send(new AdminRemoveUserFromGroupCommand({ UserPoolId: pool, Username: accountEmail, GroupName: role }));
       for (const role of roles) if (!existingRoles.includes(role)) await cognito.send(new AdminAddUserToGroupCommand({ UserPoolId: pool, Username: accountEmail, GroupName: role }));
       const updated = check(await db.models.TeamMember.update({ id: before.id, name, username, role: roles[0] as typeof VALID[number], roles, jobTitle: input.jobTitle?.trim() || null, skills: input.skills ?? [], weeklyCapacityHours: capacity, avatarKey: input.avatarKey === undefined ? before.avatarKey : input.avatarKey }), 'TeamMember.update');
-      if (!updated) fail('NOT_FOUND', 'Ce membre n’existe plus.');
+      if (!updated) fail('NOT_FOUND', 'This member no longer exists.');
       return updated;
     } catch (error) {
       for (const role of roles) if (!existingRoles.includes(role)) await cognito.send(new AdminRemoveUserFromGroupCommand({ UserPoolId: pool, Username: accountEmail, GroupName: role })).catch(() => undefined);
@@ -83,14 +88,14 @@ export const handler: Schema['manageTeamMember']['functionHandler'] = (event) =>
       throw error;
     }
   }
-  if (!input.memberId) fail('VALIDATION', 'Identifiant du membre obligatoire.');
+  if (!input.memberId) fail('VALIDATION', 'The member id is required.');
   const member = check(await db.models.TeamMember.get({ id: input.memberId }), 'TeamMember.get');
-  if (!member) fail('NOT_FOUND', 'Ce membre n’existe plus.');
+  if (!member) fail('NOT_FOUND', 'This member no longer exists.');
   await ensureOrganisationAccess(member.organisationId, caller.email, caller.roles);
   const assignedRoles = (member.roles?.length ? member.roles : [member.role ?? 'VIEWER']).filter((role): role is string => !!role);
   if (assignedRoles.some((r) => r === 'ADMIN' || r === 'PROJECT_MANAGER') && !caller.roles.includes('ADMIN')) fail('FORBIDDEN', "Only an administrator can delete a manager's account.");
-  if (normalizeEmail(member.email ?? '') === caller.email) fail('FORBIDDEN', 'Vous ne pouvez pas supprimer votre propre compte.');
-  let token: string | null | undefined; do { const page = await db.models.Task.list({ filter: { assigneeId: { eq: member.id } }, nextToken: token, limit: 1000 }); if (check(page, 'Task.list').some((t) => !['DONE', 'CANCELLED'].includes(t.status ?? 'TODO'))) fail('VALIDATION', 'Réaffectez ou fermez les tâches ouvertes avant de supprimer ce compte.'); token = page.nextToken; } while (token);
+  if (normalizeEmail(member.email ?? '') === caller.email) fail('FORBIDDEN', "You can't delete your own account.");
+  let token: string | null | undefined; do { const page = await db.models.Task.list({ filter: { assigneeId: { eq: member.id } }, nextToken: token, limit: 1000 }); if (check(page, 'Task.list').some((t) => !['DONE', 'CANCELLED'].includes(t.status ?? 'TODO'))) fail('VALIDATION', 'Reassign or close the open tasks before deleting this account.'); token = page.nextToken; } while (token);
   const memberEmail = normalizeEmail(member.email ?? '');
   await cognito.send(new AdminDisableUserCommand({ UserPoolId: pool, Username: memberEmail }));
   try { check(await db.models.TeamMember.delete({ id: member.id }), 'TeamMember.delete'); await cognito.send(new AdminDeleteUserCommand({ UserPoolId: pool, Username: memberEmail })); }

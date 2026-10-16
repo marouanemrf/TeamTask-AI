@@ -46,6 +46,8 @@ export interface MemberFormModalProps {
   onSubmit: (input: MemberInput, avatar: AvatarChange) => Promise<boolean>;
   onClose: () => void;
   canGrantPrivileged?: boolean;
+  /** An administrator editing their own record: the Admin role stays checked (no lock-out). */
+  lockAdminRole?: boolean;
 }
 
 /** Create / edit a team member in a native modal <dialog> (focus trap + Escape built in). */
@@ -58,6 +60,7 @@ function MemberFormModal({
   onSubmit,
   onClose,
   canGrantPrivileged = false,
+  lockAdminRole = false,
 }: MemberFormModalProps) {
   const id = useId();
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -412,9 +415,10 @@ function MemberFormModal({
                 <span className="form-field__label">Roles (select one or more)</span>
                 <div className="role-options">
                   {ROLES.filter((r) => canGrantPrivileged || !["ADMIN", "PROJECT_MANAGER"].includes(r)).map((r) => (
-                    <label key={r} className="checkbox-label"><input type="checkbox" checked={roles.includes(r)} onChange={(e) => setRoles((current) => e.target.checked ? [...current, r] : current.filter((role) => role !== r))} />{ROLE_LABELS[r]}</label>
+                    <label key={r} className="checkbox-label"><input type="checkbox" checked={roles.includes(r)} disabled={lockAdminRole && r === "ADMIN"} onChange={(e) => setRoles((current) => e.target.checked ? [...current, r] : current.filter((role) => role !== r))} />{ROLE_LABELS[r]}</label>
                   ))}
                 </div>
+                {lockAdminRole && <p className="form-hint">You can't remove your own Admin role.</p>}
               </div>
             </div>
 

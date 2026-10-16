@@ -20,18 +20,20 @@ export interface ProfileFormProps {
   onStatusChange: (status: OwnPresence) => void;
   onUploadPhoto: (file: File) => Promise<string | null>;
   onSave: (input: ProfileInput) => Promise<boolean>;
+  /** Administrators set their own job title; for everyone else it is read-only (set by managers). */
+  canEditJobTitle?: boolean;
 }
 
 /**
  * The user's own professional profile: photo, contact, title, summary, experience, education, skills.
  * Initialised from `member`; the page remounts it (key = id + updatedAt) when a newer version is saved.
  */
-function ProfileForm({ member, email, saving, uploading, error, ownStatus, onStatusChange, onUploadPhoto, onSave }: ProfileFormProps) {
+function ProfileForm({ member, email, saving, uploading, error, ownStatus, onStatusChange, onUploadPhoto, onSave, canEditJobTitle = false }: ProfileFormProps) {
   const id = useId();
   const [name, setName] = useState(member.name);
   const [phone, setPhone] = useState(member.phoneNumber ?? "");
-  // Read-only here: shown greyed out and sent back unchanged on save.
-  const jobTitle = member.jobTitle ?? "";
+  // Editable by administrators only; for others it is shown greyed out and sent back unchanged.
+  const [jobTitle, setJobTitle] = useState(member.jobTitle ?? "");
   const [summary, setSummary] = useState(member.professionalSummary ?? "");
   const [experience, setExperience] = useState(member.experience ?? "");
   const [education, setEducation] = useState(member.education ?? "");
@@ -52,7 +54,7 @@ function ProfileForm({ member, email, saving, uploading, error, ownStatus, onSta
     const saved = await onSave({
       name: name.trim(),
       phoneNumber: phone.trim(),
-      jobTitle,
+      jobTitle: jobTitle.trim(),
       professionalSummary: summary.trim(),
       experience: experience.trim(),
       education: education.trim(),
@@ -124,8 +126,14 @@ function ProfileForm({ member, email, saving, uploading, error, ownStatus, onSta
         </div>
         <div className="form-field">
           <label className="form-field__label" htmlFor={`${id}-job`}>Job title</label>
-          <input id={`${id}-job`} className="form-input form-input--locked" value={jobTitle || "Not set"} disabled readOnly aria-describedby={`${id}-job-hint`} />
-          <p id={`${id}-job-hint`} className="form-hint">Your job title can't be changed from your profile.</p>
+          {canEditJobTitle ? (
+            <input id={`${id}-job`} className="form-input" value={jobTitle} onChange={(e) => setJobTitle(e.target.value)} maxLength={200} />
+          ) : (
+            <>
+              <input id={`${id}-job`} className="form-input form-input--locked" value={jobTitle || "Not set"} disabled readOnly aria-describedby={`${id}-job-hint`} />
+              <p id={`${id}-job-hint`} className="form-hint">Your job title can't be changed from your profile.</p>
+            </>
+          )}
         </div>
         <div className="form-field">
           <label className="form-field__label" htmlFor={`${id}-summary`}>Professional summary</label>

@@ -5,6 +5,8 @@ import { usePresence } from "../hooks/usePresence";
 import { useMyProfile } from "../hooks/useProfile";
 import { useProjects } from "../hooks/useProjects";
 import { useTasks } from "../hooks/useTasks";
+import { useUser } from "../hooks/useUser";
+import type { TeamMember } from "../services/client";
 import { suggestCareers } from "../utils/careerSuggestions";
 
 /** Self-service profile: edit the professional profile; the CV section includes the career suggestions. */
@@ -13,6 +15,7 @@ export default function ProfilePage() {
   const { projects } = useProjects();
   const { tasks } = useTasks();
   const { ownStatus, setOwnStatus } = usePresence();
+  const { isAdmin } = useUser();
   const { member } = profile;
 
   // Projects the member has tasks in.
@@ -38,7 +41,30 @@ export default function ProfilePage() {
 
   if (profile.loading) return <p className="empty-state panel">Loading your profile…</p>;
   if (!member) {
-    return <p className="empty-state panel">Your team profile isn't available yet. Ask an administrator to add your account to the team.</p>;
+    if (!isAdmin || !profile.email) {
+      return <p className="empty-state panel">Your team profile isn't available yet. Ask an administrator to add your account to the team.</p>;
+    }
+    // An administrator whose account was created directly in Cognito (e.g. the first one of a new
+    // deployment) creates their own team profile here; the server adds it to the organisation.
+    const draft = { id: "", email: profile.email, name: profile.email.split("@")[0], skills: [], jobTitle: null, avatarKey: null, updatedAt: "" } as unknown as TeamMember;
+    return (
+      <div className="page-stack profile-page">
+        <p className="notice panel">You don't have a team profile yet. Fill it in and save to create it.</p>
+        <ProfileForm
+          key="new-admin-profile"
+          member={draft}
+          email={profile.email}
+          saving={profile.saving}
+          uploading={profile.uploading}
+          error={profile.error}
+          ownStatus={ownStatus}
+          onStatusChange={setOwnStatus}
+          onUploadPhoto={profile.uploadPhoto}
+          onSave={profile.save}
+          canEditJobTitle
+        />
+      </div>
+    );
   }
 
   return (
@@ -54,6 +80,7 @@ export default function ProfilePage() {
         onStatusChange={setOwnStatus}
         onUploadPhoto={profile.uploadPhoto}
         onSave={profile.save}
+        canEditJobTitle={isAdmin}
       />
       <CvBuilder member={member} email={profile.email} projects={relatedProjects} suggestions={suggestions} />
     </div>

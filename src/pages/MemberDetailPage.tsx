@@ -20,7 +20,7 @@ import { computeWorkload } from "../utils/workload";
 function MemberDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { isManager, isAdmin } = useUser();
+  const { isManager, isAdmin, email: myEmail } = useUser();
   const { members, loading } = useTeamMembers();
   const { tasks, loading: tasksLoading } = useTasks();
   const { projects } = useProjects();
@@ -65,6 +65,7 @@ function MemberDetailPage() {
       </div>
     );
   }
+  const isSelf = !!myEmail && member.email.toLowerCase() === myEmail.toLowerCase();
 
   async function handleUpdate(input: MemberInput, avatar: AvatarChange) {
     return member ? (await update(member, input, avatar)) !== null : false;
@@ -94,7 +95,8 @@ function MemberDetailPage() {
           <p className="member-header__email">{member.email}</p>
         </div>
         
-        {isManager && (
+        {/* Own record: only an administrator edits it here (others use My profile); nobody deletes themselves. */}
+        {isManager && (!isSelf || isAdmin) && (
           <div className="member-header__actions">
             <button
               type="button"
@@ -106,16 +108,18 @@ function MemberDetailPage() {
             >
               Edit
             </button>
-            <button
-              type="button"
-              className="button-danger"
-              onClick={() => {
-                clearError();
-                setConfirmingDelete(true);
-              }}
-            >
-              Delete
-            </button>
+            {!isSelf && (
+              <button
+                type="button"
+                className="button-danger"
+                onClick={() => {
+                  clearError();
+                  setConfirmingDelete(true);
+                }}
+              >
+                Delete
+              </button>
+            )}
           </div>
         )}
       </section>
@@ -221,6 +225,7 @@ function MemberDetailPage() {
           onSubmit={handleUpdate}
           onClose={() => setEditing(false)}
           canGrantPrivileged={isAdmin}
+          lockAdminRole={isAdmin && isSelf}
         />
       )}
     </div>
