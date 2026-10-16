@@ -5,7 +5,9 @@ backend:
   phases:
     preBuild:
       commands:
-        - nvm install 22 && nvm use 22
+        # --skip-default-packages: the build image would otherwise reinstall its own global tools
+        # (@aws-amplify/cli, cypress, bower, …) for Node 22 — slow, unused here, and a failure point.
+        - nvm install --skip-default-packages 22 && nvm use 22
         # Same npm major as local development: npm 10 (bundled with Node 22) validates the lockfile
         # differently and rejected a lockfile written by npm 11 ("Missing: … from lock file").
         - npm install -g npm@11
