@@ -1,7 +1,6 @@
 import { defineBackend } from '@aws-amplify/backend';
 import { Stack } from 'aws-cdk-lib';
 import { Policy, PolicyStatement } from 'aws-cdk-lib/aws-iam';
-import { StringParameter } from 'aws-cdk-lib/aws-ssm';
 import { auth } from './auth/resource';
 import { data } from './data/resource';
 import { assignTaskFunction } from './functions/assign-task/resource';
@@ -89,17 +88,15 @@ new Policy(Stack.of(avatarsBucket), 'GroupOwnProfilePhotoPolicy', {
   roles: (['ADMIN', 'PROJECT_MANAGER', 'MEMBER', 'VIEWER'] as const).map((group) => backend.auth.resources.groups[group].role),
 });
 
-// Email settings live in SSM Parameter Store, not in code (create them once per account):
-//   /teamtask/ses/senderEmail  verified SES identity used as the sender
-//   /teamtask/app/url          base URL of the app in emails (http://localhost:5173 or the Hosting URL)
-// The values are resolved by CloudFormation at deploy time; SES access is scoped to that one identity.
+// Email settings are Amplify secrets (SSM Parameter Store SecureString, read by the functions at
+// start-up), never code. Set them per deployment before the first deploy:
+//   sandbox:  npx ampx sandbox secret set SENDER_EMAIL   /   npx ampx sandbox secret set APP_URL
+//   branch:   Amplify console → Hosting → Secrets (SENDER_EMAIL, APP_URL = https://<branch>.<appId>.amplifyapp.com)
+// SES is limited to sending from verified identities of this account and region.
 for (const fn of [backend.deadlineCheckFunction, backend.weeklyReportFunction]) {
   const fnStack = Stack.of(fn.resources.lambda);
-  const senderEmail = StringParameter.valueForStringParameter(fnStack, '/teamtask/ses/senderEmail');
-  fn.addEnvironment('SENDER_EMAIL', senderEmail);
-  fn.addEnvironment('APP_URL', StringParameter.valueForStringParameter(fnStack, '/teamtask/app/url'));
   fn.resources.lambda.addToRolePolicy(new PolicyStatement({
     actions: ['ses:SendEmail', 'ses:SendRawEmail'],
-    resources: [`arn:aws:ses:${fnStack.region}:${fnStack.account}:identity/${senderEmail}`],
+    resources: [`arn:aws:ses:${fnStack.region}:${fnStack.account}:identity/*`],
   }));
 }
