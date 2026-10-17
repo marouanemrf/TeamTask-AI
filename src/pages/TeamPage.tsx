@@ -1,6 +1,8 @@
 import { useId, useMemo, useState } from "react";
 import MemberCard from "../components/team/MemberCard";
 import MemberFormModal from "../components/team/MemberFormModal";
+import TeamsPanel from "../components/team/TeamsPanel";
+import { useTeamGroups } from "../hooks/useTeamGroups";
 import { PlusIcon, SearchIcon } from "../components/ui/Icons";
 import { useTasks } from "../hooks/useTasks";
 import { useMemberActions, useTeamMembers } from "../hooks/useTeam";
@@ -21,6 +23,8 @@ function TeamPage() {
   const { create, submitting, error: saveError, clearError } = useMemberActions();
   const [query, setQuery] = useState("");
   const [role, setRole] = useState<RoleFilter>("ALL");
+  const [teamFilter, setTeamFilter] = useState("ALL");
+  const teamGroups = useTeamGroups();
   const [modalOpen, setModalOpen] = useState(false);
 
   // Open tasks per assignee.
@@ -37,6 +41,7 @@ function TeamPage() {
     const q = query.trim().toLowerCase();
     return members
       .filter((m) => role === "ALL" || (m.roles?.length ? m.roles.some((r) => r === role) : (m.role ?? "VIEWER") === role))
+      .filter((m) => teamFilter === "ALL" || (teamFilter === "NONE" ? !m.teamId : m.teamId === teamFilter))
       .filter(
         (m) =>
           !q ||
@@ -45,7 +50,7 @@ function TeamPage() {
           (m.skills ?? []).some((skill) => skill?.toLowerCase().includes(q)),
       )
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [members, query, role]);
+  }, [members, query, role, teamFilter]);
 
   async function handleCreate(input: MemberInput, avatar: AvatarChange) {
     return (await create(input, avatar)) !== null;
@@ -87,6 +92,16 @@ function TeamPage() {
             ))}
           </select>
         </div>
+        {teamGroups.teams.length > 0 && (
+          <div className="toolbar__filter">
+            <label className="visually-hidden" htmlFor={`${id}-team`}>Filter by team</label>
+            <select id={`${id}-team`} className="form-input" value={teamFilter} onChange={(e) => setTeamFilter(e.target.value)}>
+              <option value="ALL">All teams</option>
+              {teamGroups.teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+              <option value="NONE">No team</option>
+            </select>
+          </div>
+        )}
         {isManager && (
           <button type="button" className="button-primary button-primary--inline" onClick={openModal}>
             <PlusIcon />
@@ -117,8 +132,13 @@ function TeamPage() {
         </ul>
       )}
 
+      {!loading && !error && (
+        <TeamsPanel teams={teamGroups.teams} members={members} canManage={isManager} busy={teamGroups.busy} error={teamGroups.error} onCreate={teamGroups.create} onDelete={teamGroups.remove} />
+      )}
+
       {modalOpen && (
         <MemberFormModal
+          teams={teamGroups.teams}
           existingEmails={members.map((m) => m.email)}
           existingUsernames={members.flatMap((m) => (m.username ? [m.username] : []))}
           submitting={submitting}

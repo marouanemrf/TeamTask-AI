@@ -6,6 +6,7 @@ import { UserProvider } from "./context/UserContext";
 import { PresenceProvider } from "./context/PresenceContext";
 import { useSignIn } from "./hooks/useSignIn";
 import { signOutUser } from "./services/authService";
+import PilotMetricsPage from "./pages/PilotMetricsPage";
 import AgentActivityPage from "./pages/AgentActivityPage";
 import DashboardPage from "./pages/DashboardPage";
 import EscalationsPage from "./pages/EscalationsPage";
@@ -47,6 +48,7 @@ function App() {
               <Route path={ROUTES.projectReports} element={<ReportsPage />} />
               <Route path={ROUTES.escalations} element={<EscalationsPage />} />
               <Route path={ROUTES.agentActivity} element={<AgentActivityPage />} />
+              <Route path={ROUTES.pilot} element={<PilotMetricsPage />} />
               <Route path={ROUTES.team} element={<TeamPage />} />
               <Route path={ROUTES.workload} element={<WorkloadPage />} />
               <Route path={ROUTES.memberDetail} element={<MemberDetailPage />} />

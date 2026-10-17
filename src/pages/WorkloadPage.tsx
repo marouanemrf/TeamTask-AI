@@ -61,6 +61,7 @@ function WorkloadPage() {
       (task.requiredSkills ?? []).filter((s): s is string => !!s),
       task.estimatedHours ?? 0,
       task.id,
+      task.dueDate,
     );
 
   async function handleReassign(task: Task, assigneeId: string) {

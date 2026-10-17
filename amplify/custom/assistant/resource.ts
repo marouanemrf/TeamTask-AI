@@ -17,6 +17,7 @@ import { CfnGuardrail, CfnGuardrailVersion } from 'aws-cdk-lib/aws-bedrock';
 import { AttributeType, BillingMode, Table, TableEncryption } from 'aws-cdk-lib/aws-dynamodb';
 import type { ITable } from 'aws-cdk-lib/aws-dynamodb';
 import { PolicyStatement } from 'aws-cdk-lib/aws-iam';
+import { Key } from 'aws-cdk-lib/aws-kms';
 import type { IFunction } from 'aws-cdk-lib/aws-lambda';
 import { LogGroup, RetentionDays } from 'aws-cdk-lib/aws-logs';
 import { StringParameter } from 'aws-cdk-lib/aws-ssm';
@@ -32,6 +33,10 @@ export interface AssistantProps {
   careerFunction: IFunction;
   /** GET /assistant/executions (recorded executions: own, or the organisation's for ADMIN). */
   activityFunction: IFunction;
+  /** REST task API (/tasks, /projects/{id}/tasks), forwarded to the data API with the caller's token. */
+  taskRestFunction: IFunction;
+  /** GraphQL endpoint of the data API. */
+  graphqlUrl: string;
   userPool: IUserPool;
   /** The data API's tables, by model name. */
   tables: Record<string, ITable>;
@@ -52,14 +57,20 @@ export function defineAssistant(props: AssistantProps) {
   const stack = Stack.of(props.toolsFunction);
   const sandbox = props.deployment === 'sandbox';
 
-  // --- Activity + rate-limit table ---
+  // --- Activity + rate-limit table (customer-managed KMS key, yearly rotation) ---
+  const tableKey = new Key(stack, 'AssistantTableKey', {
+    description: `TeamTask ${props.deployment}: assistant activity and rate-limit table`,
+    enableKeyRotation: true,
+    removalPolicy: sandbox ? RemovalPolicy.DESTROY : RemovalPolicy.RETAIN,
+  });
   const table = new Table(stack, 'AssistantTable', {
     partitionKey: { name: 'pk', type: AttributeType.STRING },
     sortKey: { name: 'sk', type: AttributeType.STRING },
     billingMode: BillingMode.PAY_PER_REQUEST,
     timeToLiveAttribute: 'expiresAt',
     pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
-    encryption: TableEncryption.AWS_MANAGED,
+    encryption: TableEncryption.CUSTOMER_MANAGED,
+    encryptionKey: tableKey,
     removalPolicy: sandbox ? RemovalPolicy.DESTROY : RemovalPolicy.RETAIN,
   });
 
@@ -101,6 +112,14 @@ export function defineAssistant(props: AssistantProps) {
 
   const baseModel = props.modelId.replace(/^(eu|us|apac|global)\./, '');
   const modelResources = [`arn:aws:bedrock:${stack.region}:${stack.account}:inference-profile/${props.modelId}`, `arn:aws:bedrock:*::foundation-model/${baseModel}`];
+
+  // Read at run time by the data-stack functions that call the model (planning, weekly report).
+  const guardrailParameterName = `/teamtask/${props.deployment}/assistant/guardrail`;
+  new StringParameter(stack, 'AssistantGuardrailParameter', {
+    parameterName: guardrailParameterName,
+    stringValue: `${guardrail.attrGuardrailId}:${guardrailVersion.attrVersion}`,
+    description: 'Guardrail of the TeamTask AI features (id:version).',
+  });
 
   new StringParameter(stack, 'AssistantModelIdParameter', {
     parameterName: `/teamtask/${props.deployment}/assistant/modelId`,
@@ -159,7 +178,7 @@ export function defineAssistant(props: AssistantProps) {
         status: '$context.status', latencyMs: '$context.responseLatency', user: '$context.authorizer.claims.sub', error: '$context.error.message',
       })),
     },
-    defaultCorsPreflightOptions: { allowOrigins: props.allowedOrigins, allowMethods: ['GET', 'POST', 'OPTIONS'], allowHeaders: ['Content-Type', 'Authorization'], maxAge: Duration.hours(1) },
+    defaultCorsPreflightOptions: { allowOrigins: props.allowedOrigins, allowMethods: ['GET', 'POST', 'PATCH', 'OPTIONS'], allowHeaders: ['Content-Type', 'Authorization', 'Idempotency-Key'], maxAge: Duration.hours(1) },
   });
   // Errors produced by API Gateway itself (401, 429, 400) must carry CORS headers too.
   for (const type of [ResponseType.DEFAULT_4XX, ResponseType.DEFAULT_5XX]) {
@@ -199,6 +218,16 @@ export function defineAssistant(props: AssistantProps) {
     authorizer,
     requestParameters: { 'method.request.querystring.days': false },
   });
+  // REST task API: same rules as the app (forwarded to the task functions with the caller's token).
+  const taskIntegration = new LambdaIntegration(props.taskRestFunction, { proxy: true, timeout: Duration.seconds(29) });
+  const tasks = api.root.addResource('tasks');
+  tasks.addMethod('POST', taskIntegration, { authorizer });
+  const task = tasks.addResource('{taskId}');
+  task.addMethod('GET', taskIntegration, { authorizer });
+  task.addMethod('PATCH', taskIntegration, { authorizer });
+  for (const action of ['status', 'assign', 'close']) task.addResource(action).addMethod('POST', taskIntegration, { authorizer });
+  api.root.addResource('projects').addResource('{projectId}').addResource('tasks').addMethod('GET', taskIntegration, { authorizer });
+
   api.root.addResource('profile').addResource('career-suggestions').addMethod('POST', new LambdaIntegration(props.careerFunction, { proxy: true, timeout: Duration.seconds(29) }), { authorizer });
 
   // Career suggestions: own counter under RATE#, read-only on the profile tables, the model and guardrail.
@@ -240,6 +269,11 @@ export function defineAssistant(props: AssistantProps) {
     ALLOWED_ORIGINS: props.allowedOrigins.join(','),
   };
 
+  // The functions using the table also need its KMS key.
+  for (const fn of [props.toolsFunction, props.chatFunction, props.careerFunction, props.activityFunction]) tableKey.grantEncryptDecrypt(fn);
+
+  const taskRestEnv: Record<string, string> = { GRAPHQL_URL: props.graphqlUrl, ALLOWED_ORIGINS: props.allowedOrigins.join(',') };
+
   const chatEnv: Record<string, string> = {
     MODEL_ID: props.modelId,
     GUARDRAIL_ID: guardrail.attrGuardrailId,
@@ -253,5 +287,5 @@ export function defineAssistant(props: AssistantProps) {
 
   new CfnOutput(stack, 'TeamTaskApiUrl', { value: api.url });
   // Environment variables for the functions (applied in backend.ts with addEnvironment).
-  return { api, table, guardrail, toolsEnv, chatEnv, careerEnv, activityEnv };
+  return { api, table, guardrail, guardrailParameterName, toolsEnv, chatEnv, careerEnv, activityEnv, taskRestEnv };
 }

@@ -5,6 +5,7 @@ import { createDataClient, check } from '../shared/data';
 import { projectUrl, renderEmail, taskUrl } from '../shared/emailTemplates';
 import { selectDeadlineAction } from '../shared/automationRules';
 import { config } from '../shared/config';
+import { chatChannel, postToChat } from '../shared/notify';
 
 const client = await createDataClient(env);
 const ses = new SESv2Client({ region: 'eu-north-1' });
@@ -62,6 +63,12 @@ async function sendAndRecord(taskId: string, recipientEmail: string, subject: st
     console.error(JSON.stringify({ fn: 'deadline-check', taskId, recipientEmail, error: error instanceof Error ? error.message : String(error) }));
   }
   check(await client.models.Reminder.create({ taskId, recipientEmail, channel: 'EMAIL', scheduledAt: now.toISOString(), sentAt, status }), 'Reminder.create');
+  // Optional Teams / Slack channel (webhook in SSM): same message, recorded as its own reminder.
+  const channel = await chatChannel();
+  if (channel) {
+    const posted = await postToChat(`${heading}: ${body}`, { url: link, label: linkLabel });
+    check(await client.models.Reminder.create({ taskId, recipientEmail, channel, scheduledAt: now.toISOString(), sentAt: posted ? now.toISOString() : null, status: posted ? 'SENT' : 'FAILED' }), 'Reminder.create');
+  }
   return status === 'SENT';
 }
 
@@ -104,7 +111,7 @@ export const handler = async () => {
       if (!escalation) throw new Error('Escalation.create returned no data');
       check(await client.models.TaskEvent.create({ entityId: task.id, eventType: 'ESCALATED', actorType: 'SYSTEM', actorEmail: env.SENDER_EMAIL, after: JSON.stringify({ escalationId: escalation.id, reason, impacted }) }), 'TaskEvent.create');
       if (project.managerEmail) {
-        await sendAndRecord(task.id, project.managerEmail, `Escalation: ${task.title}`, 'A task needs your attention', `“${task.title}” is ${action.overdueDays} day(s) overdue. ${impactText}`, projectUrl(appUrl, project.id), 'Ouvrir le projet');
+        await sendAndRecord(task.id, project.managerEmail, `Escalation: ${task.title}`, 'A task needs your attention', `“${task.title}” is ${action.overdueDays} day(s) overdue. ${impactText}`, projectUrl(appUrl, project.id), 'Open the project');
       }
     } catch (error) {
       console.error(JSON.stringify({ fn: 'deadline-check', taskId: task.id, error: error instanceof Error ? error.stack : String(error) }));

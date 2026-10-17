@@ -8,6 +8,7 @@ import PresenceDot from "../components/team/PresenceDot";
 import { useProjects } from "../hooks/useProjects";
 import { useTasks } from "../hooks/useTasks";
 import { useMemberActions, useTeamMembers } from "../hooks/useTeam";
+import { useTeamGroups } from "../hooks/useTeamGroups";
 import { useUser } from "../hooks/useUser";
 import type { Task } from "../services/client";
 import type { AvatarChange, MemberInput } from "../services/teamService";
@@ -26,6 +27,7 @@ function MemberDetailPage() {
   const { tasks, loading: tasksLoading } = useTasks();
   const { projects } = useProjects();
   const { update, remove, submitting, error, clearError } = useMemberActions();
+  const teamGroups = useTeamGroups();
   const [editing, setEditing] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
@@ -94,6 +96,10 @@ function MemberDetailPage() {
           {member.username && <p className="member-header__username">@{member.username}</p>}
           <p className="text-muted">{member.jobTitle || "No job title"}</p>
           <p className="member-header__email">{member.email}</p>
+          {member.teamId && <p className="text-muted">Team: {teamGroups.teams.find((t) => t.id === member.teamId)?.name ?? "—"}</p>}
+          {(member.unavailableFrom || member.unavailableUntil) && (
+            <p className="form-hint">Planned absence: {member.unavailableFrom ? formatDate(member.unavailableFrom) : "…"} – {member.unavailableUntil ? formatDate(member.unavailableUntil) : "…"}</p>
+          )}
         </div>
         
         {/* Own record: only an administrator edits it here (others use My profile); nobody deletes themselves. */}
@@ -219,6 +225,7 @@ function MemberDetailPage() {
       {editing && (
         <MemberFormModal
           member={member}
+          teams={teamGroups.teams}
           existingEmails={members.map((m) => m.email)}
           existingUsernames={members.flatMap((m) => (m.username ? [m.username] : []))}
           submitting={submitting}

@@ -11,6 +11,8 @@ import { weeklyReportFunction } from '../functions/weekly-report/resource';
 import { manageTeamMemberFunction } from '../functions/manage-team-member/resource';
 import { manageProfileFunction } from '../functions/manage-profile/resource';
 import { presenceFunction } from '../functions/presence/resource';
+import { aiPlanningFunction } from '../functions/ai-planning/resource';
+import { planWorkflowFunction } from '../functions/plan-workflow/resource';
 
 /**
  * TeamTask AI data model.
@@ -36,10 +38,26 @@ const schema = a.schema({
     .model({
       name: a.string().required(),
       members: a.hasMany('TeamMember', 'organisationId'),
+      teams: a.hasMany('Team', 'organisationId'),
       projects: a.hasMany('Project', 'organisationId'),
     })
     .authorization((allow) => [
       allow.group('ADMIN'),
+      allow.authenticated().to(['read']),
+    ]),
+
+  // A group of members inside the organisation (e.g. "Cloud security", "GRC").
+  Team: a
+    .model({
+      organisationId: a.id().required(),
+      organisation: a.belongsTo('Organisation', 'organisationId'),
+      name: a.string().required(),
+      description: a.string(),
+      leadMemberId: a.id(),
+      members: a.hasMany('TeamMember', 'teamId'),
+    })
+    .authorization((allow) => [
+      allow.groups(['ADMIN', 'PROJECT_MANAGER']),
       allow.authenticated().to(['read']),
     ]),
 
@@ -63,6 +81,11 @@ const schema = a.schema({
       professionalSummary: a.string(),
       skills: a.string().array(),
       weeklyCapacityHours: a.integer().default(40),
+      // Planned absence (leave, training...): not suggested as owner for tasks due in that period.
+      unavailableFrom: a.date(),
+      unavailableUntil: a.date(),
+      teamId: a.id(),
+      team: a.belongsTo('Team', 'teamId'),
       assignedTasks: a.hasMany('Task', 'assigneeId'),
     })
     .authorization((allow) => [
@@ -156,7 +179,11 @@ const schema = a.schema({
   /* AI recommendations & human approval                                     */
   /* ---------------------------------------------------------------------- */
 
-  // A suggestion produced by the AI, pending human review.
+  // A suggestion produced by the AI, pending human review. Lifecycle of a TASK_PLAN (driven by the
+  // approval state machine, see amplify/custom/workflows): GENERATING -> PENDING -> APPROVED -> APPLIED,
+  // or REJECTED / EXPIRED (no decision in time) / FAILED. Read-only for managers: it changes only
+  // through requestProjectPlan / decideRecommendation and the workflow, so no one can approve by
+  // writing the record directly.
   AIRecommendation: a
     .model({
       projectId: a.id().required(),
@@ -164,12 +191,16 @@ const schema = a.schema({
       type: a.enum(['TASK_PLAN', 'ASSIGNMENT', 'DEADLINE', 'REALLOCATION', 'RISK']),
       payload: a.json(),
       rationale: a.string(),
-      status: a.enum(['PENDING', 'APPROVED', 'REJECTED']),
+      status: a.enum(['GENERATING', 'PENDING', 'APPROVED', 'REJECTED', 'APPLIED', 'EXPIRED', 'FAILED']),
+      requestedBy: a.email(),
+      // Step Functions task token of the "wait for decision" step (useless without IAM rights).
+      workflowToken: a.string(),
+      error: a.string(),
       approval: a.hasOne('Approval', 'recommendationId'),
     })
-    .authorization((allow) => [allow.groups(['ADMIN', 'PROJECT_MANAGER'])]),
+    .authorization((allow) => [allow.groups(['ADMIN', 'PROJECT_MANAGER']).to(['read'])]),
 
-  // The human decision on a recommendation.
+  // The human decision on a recommendation (written only by decideRecommendation).
   Approval: a
     .model({
       recommendationId: a.id().required(),
@@ -179,7 +210,7 @@ const schema = a.schema({
       comment: a.string(),
       decidedAt: a.datetime(),
     })
-    .authorization((allow) => [allow.groups(['ADMIN', 'PROJECT_MANAGER'])]),
+    .authorization((allow) => [allow.groups(['ADMIN', 'PROJECT_MANAGER']).to(['read'])]),
 
   /* ---------------------------------------------------------------------- */
   /* Follow-up: reminders & escalations                                      */
@@ -224,6 +255,7 @@ const schema = a.schema({
         'REJECTED',
         'REMINDER_SENT',
         'ESCALATED',
+        'AI_PROPOSED',
       ]),
       actorType: a.enum(['USER', 'AI', 'SYSTEM']),
       actorEmail: a.email(),
@@ -250,6 +282,8 @@ const schema = a.schema({
       summary: a.string(),
       risks: a.string().array(),
       correctiveActions: a.string().array(),
+      // true when the summary and the corrective actions were written by the AI model.
+      aiGenerated: a.boolean(),
     })
     .authorization((allow) => [allow.authenticated().to(['read'])]),
 
@@ -366,6 +400,29 @@ const schema = a.schema({
     .handler(a.handler.function(resolveEscalationFunction))
     .authorization((allow) => [allow.authenticated()]),
 
+  // AI planning: a manager asks for a plan; the approval workflow generates it, waits for the
+  // decision, and creates the tasks only after approval.
+  requestProjectPlan: a
+    .mutation()
+    .arguments({ clientRequestId: a.string().required(), projectId: a.id().required(), scope: a.string().required() })
+    .returns(a.ref('AIRecommendation'))
+    .handler(a.handler.function(aiPlanningFunction))
+    .authorization((allow) => [allow.authenticated()]),
+
+  decideRecommendation: a
+    .mutation()
+    .arguments({
+      clientRequestId: a.string().required(),
+      recommendationId: a.id().required(),
+      decision: a.string().required(),
+      comment: a.string(),
+      // The plan as the manager edited it (tasks kept, owners, dates...), checked again on the server.
+      tasks: a.json(),
+    })
+    .returns(a.ref('AIRecommendation'))
+    .handler(a.handler.function(aiPlanningFunction))
+    .authorization((allow) => [allow.authenticated()]),
+
   generateWeeklyReport: a
     .mutation()
     .arguments({ projectId: a.id().required() })
@@ -374,9 +431,9 @@ const schema = a.schema({
     .authorization((allow) => [allow.authenticated()]),
 
   manageTeamMember: a.mutation().arguments({
-    action: a.string().required(), memberId: a.id(), organisationId: a.id(), name: a.string(), email: a.email(), username: a.string(), roles: a.string().array(), role: a.string(), jobTitle: a.string(), skills: a.string().array(), weeklyCapacityHours: a.integer(), avatarKey: a.string(),
+    action: a.string().required(), memberId: a.id(), organisationId: a.id(), name: a.string(), email: a.email(), username: a.string(), roles: a.string().array(), role: a.string(), jobTitle: a.string(), skills: a.string().array(), weeklyCapacityHours: a.integer(), avatarKey: a.string(), teamId: a.id(), unavailableFrom: a.date(), unavailableUntil: a.date(),
   }).returns(a.ref('TeamMember')).handler(a.handler.function(manageTeamMemberFunction)).authorization((allow) => [allow.authenticated()]),
-  updateMyProfile: a.mutation().arguments({ name: a.string(), phoneNumber: a.string(), jobTitle: a.string(), skills: a.string().array(), experience: a.string(), education: a.string(), professionalSummary: a.string(), avatarKey: a.string() }).returns(a.ref('TeamMember')).handler(a.handler.function(manageProfileFunction)).authorization((allow) => [allow.authenticated()]),
+  updateMyProfile: a.mutation().arguments({ name: a.string(), phoneNumber: a.string(), jobTitle: a.string(), skills: a.string().array(), experience: a.string(), education: a.string(), professionalSummary: a.string(), avatarKey: a.string(), unavailableFrom: a.date(), unavailableUntil: a.date() }).returns(a.ref('TeamMember')).handler(a.handler.function(manageProfileFunction)).authorization((allow) => [allow.authenticated()]),
   heartbeatPresence: a.mutation().arguments({ status: a.string().required() }).returns(a.ref('Presence')).handler(a.handler.function(presenceFunction)).authorization((allow) => [allow.authenticated()]),
 
   Presence: a.model({ email: a.email().required(), status: a.enum(['ONLINE', 'BUSY']), lastSeenAt: a.datetime().required() })
@@ -396,6 +453,8 @@ const schema = a.schema({
     allow.resource(manageTeamMemberFunction),
     allow.resource(manageProfileFunction),
     allow.resource(presenceFunction),
+    allow.resource(aiPlanningFunction),
+    allow.resource(planWorkflowFunction),
   ]);
 
 export type Schema = ClientSchema<typeof schema>;

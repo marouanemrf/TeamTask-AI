@@ -3232,3 +3232,15 @@ img.avatar {
 /* Inside the white CV paper */
 .career-loading .loading-state__spinner { border-color: rgba(10, 107, 91, 0.2); border-top-color: #0a6b5b; }
 .text-muted.loading-state { justify-content: flex-start; }
+
+/* AI plan review (project > AI plan) */
+.ai-plan__table td { vertical-align: top; }
+.ai-plan__table .form-input { min-width: 0; width: 100%; }
+.ai-plan__table td:nth-child(2) { min-width: 220px; }
+.ai-plan__table td:nth-child(3) { min-width: 220px; }
+.ai-plan__table td:nth-child(6) { min-width: 140px; }
+.ai-plan__table .form-hint { margin: var(--space-1) 0 0; }
+.ai-plan__warnings { margin: 0 0 var(--space-3); padding-left: var(--space-5); }
+
+/* Teams (Team page) */
+.teams-panel__form { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--space-3); align-items: end; margin-top: var(--space-4); }

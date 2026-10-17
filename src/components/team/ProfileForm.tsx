@@ -39,7 +39,9 @@ function ProfileForm({ member, email, saving, uploading, error, ownStatus, onSta
   const [education, setEducation] = useState(member.education ?? "");
   const [skills, setSkills] = useState<string[]>((member.skills ?? []).filter((s): s is string => !!s));
   const [avatarKey, setAvatarKey] = useState<string | null>(member.avatarKey ?? null);
-  const [fieldErrors, setFieldErrors] = useState<{ name?: string; phone?: string }>({});
+  const [awayFrom, setAwayFrom] = useState(member.unavailableFrom ?? "");
+  const [awayUntil, setAwayUntil] = useState(member.unavailableUntil ?? "");
+  const [fieldErrors, setFieldErrors] = useState<{ name?: string; phone?: string; away?: string }>({});
   const [notice, setNotice] = useState<string | null>(null);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -48,9 +50,11 @@ function ProfileForm({ member, email, saving, uploading, error, ownStatus, onSta
     const errors: typeof fieldErrors = {};
     if (!name.trim()) errors.name = "Name is required.";
     if (phone.trim() && !PHONE_PATTERN.test(phone.trim())) errors.phone = "Enter a valid phone number (digits, spaces, +, - or parentheses).";
+    if (awayFrom && awayUntil && awayUntil < awayFrom) errors.away = "The end of the absence must be on or after its start.";
     setFieldErrors(errors);
     if (errors.name) return document.getElementById(`${id}-name`)?.focus();
     if (errors.phone) return document.getElementById(`${id}-phone`)?.focus();
+    if (errors.away) return document.getElementById(`${id}-away-until`)?.focus();
     const saved = await onSave({
       name: name.trim(),
       phoneNumber: phone.trim(),
@@ -60,6 +64,8 @@ function ProfileForm({ member, email, saving, uploading, error, ownStatus, onSta
       education: education.trim(),
       skills,
       avatarKey,
+      unavailableFrom: awayFrom || null,
+      unavailableUntil: awayUntil || null,
     });
     if (saved) setNotice("Profile saved.");
   }
@@ -151,6 +157,21 @@ function ProfileForm({ member, email, saving, uploading, error, ownStatus, onSta
           <label className="form-field__label" htmlFor={`${id}-skills`}>Skills</label>
           <SkillsInput id={`${id}-skills`} skills={skills} onChange={setSkills} />
         </div>
+        <fieldset className="form-field">
+          <legend className="form-field__label">Planned absence</legend>
+          <p id={`${id}-away-hint`} className="form-hint">Leave, training… You won't be suggested as owner for tasks due in this period. Leave empty if none.</p>
+          <div className="modal__row">
+            <div className="form-field">
+              <label className="form-field__label" htmlFor={`${id}-away-from`}>From</label>
+              <input id={`${id}-away-from`} className="form-input" type="date" value={awayFrom} onChange={(e) => setAwayFrom(e.target.value)} aria-describedby={`${id}-away-hint`} />
+            </div>
+            <div className="form-field">
+              <label className="form-field__label" htmlFor={`${id}-away-until`}>Until</label>
+              <input id={`${id}-away-until`} className="form-input" type="date" value={awayUntil} min={awayFrom || undefined} onChange={(e) => setAwayUntil(e.target.value)} aria-invalid={fieldErrors.away ? true : undefined} aria-describedby={fieldErrors.away ? `${id}-away-error` : `${id}-away-hint`} />
+            </div>
+          </div>
+          {fieldErrors.away && <p id={`${id}-away-error`} className="form-field__error">{fieldErrors.away}</p>}
+        </fieldset>
 
         {error && <div className="form-alert" role="alert"><span>{error}</span></div>}
         <div className="status-region" role="status">{notice && <p className="notice">{notice}</p>}</div>

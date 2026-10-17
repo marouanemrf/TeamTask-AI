@@ -47,8 +47,8 @@ function TaskFormModal({ project, task, projectTasks, dependencies, members, all
 
   // Assignee options: best skill match first, then lightest workload.
   const ranked = useMemo(
-    () => rankAssignees(members, allTasks, skills, Number.isFinite(hoursValue) ? hoursValue : 0, task?.id),
-    [members, allTasks, skills, hoursValue, task?.id],
+    () => rankAssignees(members, allTasks, skills, Number.isFinite(hoursValue) ? hoursValue : 0, task?.id, dueDate),
+    [members, allTasks, skills, hoursValue, task?.id, dueDate],
   );
   const selected = ranked.find((o) => o.member.id === assigneeId);
   const overload = selected && selected.projectedPercent > 100 ? selected : undefined;

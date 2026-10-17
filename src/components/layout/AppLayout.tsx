@@ -8,7 +8,7 @@ import { ROUTES, pageTitle } from "../../utils/routes";
 import AssistantWidget from "../agent/AssistantWidget";
 import MemberAvatar from "../team/MemberAvatar";
 import PresenceDot from "../team/PresenceDot";
-import { ChartIcon, ChatIcon, CloseIcon, DashboardIcon, FolderIcon, MenuIcon, ProfileIcon, ShieldIcon, SignOutIcon, TasksIcon, TeamIcon } from "../ui/Icons";
+import { ChartIcon, ChatIcon, CloseIcon, DashboardIcon, FlagIcon, FolderIcon, MenuIcon, ProfileIcon, ShieldIcon, SignOutIcon, TasksIcon, TeamIcon } from "../ui/Icons";
 import ThemeToggle from "../ui/ThemeToggle";
 
 interface NavItem {
@@ -28,6 +28,7 @@ const NAV_ITEMS: readonly NavItem[] = [
   { to: ROUTES.workload, label: "Team workload", icon: <ChartIcon />, isActive: (p) => p.startsWith(ROUTES.workload), managersOnly: true },
   { to: ROUTES.escalations, label: "Open escalations", icon: <ShieldIcon />, isActive: (p) => p.startsWith(ROUTES.escalations), managersOnly: true },
   { to: ROUTES.agentActivity, label: "Agent activity", icon: <ChatIcon />, isActive: (p) => p.startsWith(ROUTES.agentActivity) },
+  { to: ROUTES.pilot, label: "Pilot metrics", icon: <FlagIcon />, isActive: (p) => p.startsWith(ROUTES.pilot), managersOnly: true },
 ];
 
 /** Authenticated shell: sidebar navigation (off-canvas below 768px), top bar, page outlet. */

@@ -14,6 +14,8 @@ export interface MemberInput {
   jobTitle?: string;
   skills: string[];
   weeklyCapacityHours: number;
+  /** Team inside the organisation; null = none. */
+  teamId?: string | null;
 }
 
 /** What to do with the profile picture when saving. */
@@ -145,6 +147,7 @@ function toRecordFields(input: MemberInput) {
     roles: input.roles,
     skills: input.skills,
     weeklyCapacityHours: input.weeklyCapacityHours,
+    ...(input.teamId !== undefined ? { teamId: input.teamId } : {}),
   };
 }
 

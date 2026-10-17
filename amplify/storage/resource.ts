@@ -1,8 +1,9 @@
 import { defineStorage } from '@aws-amplify/backend';
 
 /**
- * S3 bucket for team member profile pictures.
+ * S3 bucket for team member profile pictures and task attachments.
  * - avatars/*                       uploaded by managers from the Team page (any member).
+ * - task-attachments/<taskId>/*     task documents (10 MB max, checked by the app).
  * - profile-avatars/{entity_id}/*   uploaded by each user for their own profile (self-service).
  * Any signed-in user can view both. The two prefixes must not overlap: Amplify rejects a path
  * that is a prefix of an {entity_id} path.
@@ -17,6 +18,13 @@ export const storage = defineStorage({
     'avatars/*': [
       allow.groups(['ADMIN', 'PROJECT_MANAGER']).to(['read', 'write', 'delete']),
       allow.groups(['MEMBER', 'VIEWER']).to(['read']),
+      allow.authenticated.to(['read']),
+    ],
+    // Task documents: managers and members add files, managers delete them, everyone signed in reads.
+    'task-attachments/*': [
+      allow.groups(['ADMIN', 'PROJECT_MANAGER']).to(['read', 'write', 'delete']),
+      allow.groups(['MEMBER']).to(['read', 'write']),
+      allow.groups(['VIEWER']).to(['read']),
       allow.authenticated.to(['read']),
     ],
     'profile-avatars/{entity_id}/*': [

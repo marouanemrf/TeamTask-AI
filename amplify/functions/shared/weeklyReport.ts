@@ -5,6 +5,10 @@ import { check } from './data';
 import { isDuplicateWrite } from './audit';
 import { isoWeekNumber, isoWeekYear, reportNumbers } from './automationRules';
 import { projectUrl, renderEmail } from './emailTemplates';
+import { askModel } from './aiModel';
+import { postToChat } from './notify';
+import { parseWeeklyAnswer, WEEKLY_SYSTEM_PROMPT, weeklyPrompt } from './weeklyAi';
+import type { WeeklyFacts } from './weeklyAi';
 
 const PAGE_SIZE = 500;
 
@@ -77,15 +81,54 @@ export async function generateProjectReport(client: DataClient, ses: SESv2Client
     byMember.set(task.assigneeId!, memberTasks);
   }
   const correctiveActions: string[] = [];
+  const memberNames = new Map<string, string>();
+  const overloaded: WeeklyFacts['overloaded'] = [];
+  const available: WeeklyFacts['available'] = [];
   for (const [memberId, assigned] of byMember) {
     const member = check(await client.models.TeamMember.get({ id: memberId }), 'TeamMember.get');
     const capacity = member?.weeklyCapacityHours ?? 40;
     const hours = assigned.reduce((sum, task) => sum + (task.estimatedHours ?? 0), 0);
     const percent = capacity > 0 ? Math.round((hours / capacity) * 100) : 0;
-    if (percent > 100 && member) correctiveActions.push(`Reassign “${assigned[0].title}”: ${member.name} is at ${percent}% workload.`);
+    if (member) memberNames.set(memberId, member.name);
+    if (percent > 100 && member) {
+      correctiveActions.push(`Reassign “${assigned[0].title}”: ${member.name} is at ${percent}% workload.`);
+      overloaded.push({ name: member.name, percent });
+    } else if (member && percent < 70) available.push({ name: member.name, percent });
   }
 
-  const summary = `Week ${weekNumber}: ${numbers.completed} of ${numbers.total} task(s) done (${numbers.completionRate}%), ${numbers.inProgress} in progress, ${numbers.overdueCount} overdue and ${numbers.blocked.length} blocked.`;
+  let summary = `Week ${weekNumber}: ${numbers.completed} of ${numbers.total} task(s) done (${numbers.completionRate}%), ${numbers.inProgress} in progress, ${numbers.overdueCount} overdue and ${numbers.blocked.length} blocked.`;
+  let actions = correctiveActions;
+  let aiGenerated = false;
+  // The AI writes the summary and proposes actions from the facts above; the rule-based text stays
+  // when the model is not configured, fails, or its answer doesn't quote the real numbers.
+  if (process.env.MODEL_ID && numbers.total > 0) {
+    const facts: WeeklyFacts = {
+      project: project.name,
+      week: `${year}-W${String(weekNumber).padStart(2, '0')}`,
+      total: numbers.total,
+      completed: numbers.completed,
+      inProgress: numbers.inProgress,
+      overdue: numbers.overdueCount,
+      blocked: numbers.blocked.length,
+      completionRate: numbers.completionRate,
+      risks,
+      overloaded,
+      available,
+      openTasks: tasks.filter((t) => t.status !== 'DONE' && t.status !== 'CANCELLED').map((t) => ({ title: t.title, dueDate: t.dueDate ?? null, owner: t.assigneeId ? memberNames.get(t.assigneeId) ?? null : null, status: t.status ?? 'TODO' })),
+    };
+    try {
+      const answer = await askModel(WEEKLY_SYSTEM_PROMPT, weeklyPrompt(facts), 1200, 0.2);
+      const parsed = answer.stopReason === 'guardrail_intervened' ? null : parseWeeklyAnswer(answer.text, facts);
+      console.info(JSON.stringify({ fn: 'weekly-report', projectId: project.id, ai: parsed ? 'USED' : 'REJECTED', stopReason: answer.stopReason, outputTokens: answer.outputTokens }));
+      if (parsed) {
+        summary = parsed.summary;
+        actions = parsed.correctiveActions.length ? parsed.correctiveActions : correctiveActions;
+        aiGenerated = true;
+      }
+    } catch (error) {
+      console.warn(JSON.stringify({ fn: 'weekly-report', projectId: project.id, ai: 'ERROR', error: error instanceof Error ? error.name : String(error) }));
+    }
+  }
   const created = await client.models.WeeklyReport.create({
     id: reportId(project.id, year, weekNumber),
     projectId: project.id,
@@ -98,7 +141,8 @@ export async function generateProjectReport(client: DataClient, ses: SESv2Client
     completionRate: numbers.completionRate,
     summary,
     risks,
-    correctiveActions,
+    correctiveActions: actions,
+    aiGenerated,
   });
   // A concurrent run (schedule + manual) created it first: return that one, send nothing.
   if (isDuplicateWrite(created.errors)) return (await existingReport(client, project.id, year, weekNumber))!;
@@ -106,12 +150,13 @@ export async function generateProjectReport(client: DataClient, ses: SESv2Client
   if (!report) throw new Error('WeeklyReport.create returned no data');
 
   if (project.managerEmail) {
-    const content = renderEmail({ subject: `Weekly report: ${project.name}`, heading: `Weekly report · ${project.name}`, body: `${summary}\n\nRisks:\n${risks.length ? risks.map((risk) => `• ${risk}`).join('\n') : 'No risks reported.'}\n\nSuggested actions:\n${correctiveActions.length ? correctiveActions.map((action) => `• ${action}`).join('\n') : 'No actions suggested.'}`, link: projectUrl(appUrl, project.id), linkLabel: 'Open the project' });
+    const content = renderEmail({ subject: `Weekly report: ${project.name}`, heading: `Weekly report · ${project.name}`, body: `${summary}\n\nRisks:\n${risks.length ? risks.map((risk) => `• ${risk}`).join('\n') : 'No risks reported.'}\n\nSuggested actions${aiGenerated ? ' (AI)' : ''}:\n${actions.length ? actions.map((action) => `• ${action}`).join('\n') : 'No actions suggested.'}`, link: projectUrl(appUrl, project.id), linkLabel: 'Open the project' });
     try {
       await ses.send(new SendEmailCommand({ FromEmailAddress: sender, Destination: { ToAddresses: [project.managerEmail] }, Content: { Simple: { Subject: { Data: `Weekly report: ${project.name}`, Charset: 'UTF-8' }, Body: { Html: { Data: content.html, Charset: 'UTF-8' }, Text: { Data: content.text, Charset: 'UTF-8' } } } } }));
     } catch (error) {
       console.error(JSON.stringify({ fn: 'weekly-report', projectId: project.id, error: error instanceof Error ? error.message : String(error) }));
     }
   }
+  await postToChat(`Weekly report · ${project.name}: ${summary}`, { url: projectUrl(appUrl, project.id), label: 'Open the project' });
   return report;
 }

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { KeyboardEvent } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
+import AiPlanPanel from "../components/projects/AiPlanPanel";
 import MilestonesPanel from "../components/projects/MilestonesPanel";
 import ProjectEditModal from "../components/projects/ProjectEditModal";
 import ProjectHeader from "../components/projects/ProjectHeader";
@@ -26,6 +27,8 @@ const TABS = [
   { id: "kanban", label: "Kanban board" },
   { id: "list", label: "Task list" },
   { id: "milestones", label: "Milestones" },
+  // Managers only (see visibleTabs).
+  { id: "ai-plan", label: "AI plan" },
 ] as const;
 type TabId = (typeof TABS)[number]["id"];
 
@@ -48,8 +51,9 @@ function ProjectDetailPage() {
   const [editingProject, setEditingProject] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
+  const visibleTabs = TABS.filter((t) => t.id !== "ai-plan" || isManager);
   const tabParam = searchParams.get("tab");
-  const tab: TabId = TABS.some((t) => t.id === tabParam) ? (tabParam as TabId) : "kanban";
+  const tab: TabId = visibleTabs.some((t) => t.id === tabParam) ? (tabParam as TabId) : "kanban";
   const today = todayIsoDate();
   const membersById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
   const progress = useMemo(() => projectProgress(board.tasks), [board.tasks]);
@@ -100,13 +104,13 @@ function ProjectDetailPage() {
 
   // Arrow keys move between tabs (WAI-ARIA tabs pattern).
   function handleTabKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
-    const index = TABS.findIndex((t) => t.id === tab);
+    const index = visibleTabs.findIndex((t) => t.id === tab);
     const delta = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
     if (!delta && event.key !== "Home" && event.key !== "End") return;
     event.preventDefault();
-    const nextIndex = event.key === "Home" ? 0 : event.key === "End" ? TABS.length - 1 : (index + delta + TABS.length) % TABS.length;
-    selectTab(TABS[nextIndex].id);
-    document.getElementById(`tab-${TABS[nextIndex].id}`)?.focus();
+    const nextIndex = event.key === "Home" ? 0 : event.key === "End" ? visibleTabs.length - 1 : (index + delta + visibleTabs.length) % visibleTabs.length;
+    selectTab(visibleTabs[nextIndex].id);
+    document.getElementById(`tab-${visibleTabs[nextIndex].id}`)?.focus();
   }
 
   if (loading) return <LoadingState className="empty-state panel">Loading project…</LoadingState>;
@@ -140,7 +144,7 @@ function ProjectDetailPage() {
       {/* Tabs */}
       <div className="tabs-bar">
         <div className="tabs" role="tablist" aria-label="Project views">
-          {TABS.map((t) => (
+          {visibleTabs.map((t) => (
             <button
               key={t.id}
               id={`tab-${t.id}`}
@@ -157,7 +161,7 @@ function ProjectDetailPage() {
             </button>
           ))}
         </div>
-        {isManager && tab !== "milestones" && (
+        {isManager && tab !== "milestones" && tab !== "ai-plan" && (
           <button
             type="button"
             className="button-primary button-primary--inline"
@@ -189,7 +193,9 @@ function ProjectDetailPage() {
       )}
 
       <div id={`panel-${tab}`} role="tabpanel" aria-labelledby={`tab-${tab}`} tabIndex={0} className="tab-panel">
-        {tab === "milestones" ? (
+        {tab === "ai-plan" ? (
+          <AiPlanPanel project={project} members={members} allTasks={allTasks} today={today} onShowBoard={() => selectTab("kanban")} />
+        ) : tab === "milestones" ? (
           <MilestonesPanel
             milestones={milestones.milestones}
             loading={milestones.loading}

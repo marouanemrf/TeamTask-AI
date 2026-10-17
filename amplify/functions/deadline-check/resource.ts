@@ -5,7 +5,6 @@ export const deadlineCheckFunction = defineFunction({
   entry: './handler.ts',
   runtime: 20,
   timeoutSeconds: 120,
-  schedule: '0 7 * * ? *',
   resourceGroupName: 'data',
   environment: {
     // Amplify secrets (SSM Parameter Store), set per deployment — see amplify/backend.ts.

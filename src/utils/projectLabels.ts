@@ -42,4 +42,5 @@ export const TASK_EVENT_LABELS: Record<TaskEventType, string> = {
   REJECTED: "Rejected",
   REMINDER_SENT: "Reminder sent",
   ESCALATED: "Escalated",
+  AI_PROPOSED: "Plan proposed by AI",
 };

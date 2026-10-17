@@ -10,6 +10,7 @@ import type { Task, TaskEvent, TeamMember } from "../services/client";
 import { canBeAssigned, canPerform } from "../../amplify/functions/shared/rules";
 import type { Role } from "../../amplify/functions/shared/rules";
 import { computeWorkload } from "./workload";
+import { isUnavailable } from "../../amplify/functions/shared/planning";
 
 export {
   BLOCK_REASON_MAX,
@@ -78,9 +79,16 @@ export function rankAssignees(
   requiredSkills: readonly string[],
   taskHours: number,
   excludeTaskId?: string,
+  dueDate?: string | null,
 ): AssigneeOption[] {
+  const now = new Date();
+  const date = dueDate || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
   return members
-    .filter(canBeAssigned) // VIEWER is read-only: never offered as an assignee
+    .filter((member) => {
+      if (!canBeAssigned(member)) return false; // VIEWER is read-only: never offered as an assignee
+      // Same rule as the planner: away on the due date (or today) = not offered.
+      return !isUnavailable(member, date);
+    })
     .map((member) => {
       const theirTasks = allTasks.filter((t) => t.assigneeId === member.id && t.id !== excludeTaskId);
       const current = computeWorkload(theirTasks, member.weeklyCapacityHours);

@@ -48,6 +48,8 @@ export interface MemberFormModalProps {
   canGrantPrivileged?: boolean;
   /** An administrator editing their own record: the Admin role stays checked (no lock-out). */
   lockAdminRole?: boolean;
+  /** Teams of the organisation, for the Team field. */
+  teams?: readonly { id: string; name: string }[];
 }
 
 /** Create / edit a team member in a native modal <dialog> (focus trap + Escape built in). */
@@ -61,6 +63,7 @@ function MemberFormModal({
   onClose,
   canGrantPrivileged = false,
   lockAdminRole = false,
+  teams = [],
 }: MemberFormModalProps) {
   const id = useId();
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -88,6 +91,7 @@ function MemberFormModal({
   const [capacity, setCapacity] = useState(
     String(member?.weeklyCapacityHours ?? 40),
   );
+  const [teamId, setTeamId] = useState(member?.teamId ?? "");
   const [errors, setErrors] = useState<FieldErrors>({});
   const [submitted, setSubmitted] = useState(false);
 
@@ -208,6 +212,7 @@ function MemberFormModal({
       roles,
       skills,
       weeklyCapacityHours: Number(capacity),
+      teamId: teamId || null,
     };
     const saved = await onSubmit(input, avatar);
     if (saved) onClose();
@@ -451,6 +456,16 @@ function MemberFormModal({
               />
               {fieldError("capacity")}
             </div>
+
+            {teams.length > 0 && (
+              <div className="form-field">
+                <label className="form-field__label" htmlFor={`${id}-team`}>Team</label>
+                <select id={`${id}-team`} className="form-input" value={teamId} onChange={(e) => setTeamId(e.target.value)}>
+                  <option value="">No team</option>
+                  {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                </select>
+              </div>
+            )}
 
             {error && (
               <div className="form-alert" role="alert">

@@ -6,6 +6,23 @@ import { fail } from '../shared/errors';
 import { runMutation } from '../shared/handler';
 import { isManagerRole } from '../shared/rules';
 import { normalizeEmail, normalizeUsername } from '../shared/text';
+import * as v from '../shared/validate';
+
+/** Team (same organisation) and planned absence; undefined = unchanged. */
+async function extraFields(input: { teamId?: string | null; unavailableFrom?: string | null; unavailableUntil?: string | null }, organisationId: string) {
+  const out: { teamId?: string | null; unavailableFrom?: string | null; unavailableUntil?: string | null } = {};
+  if (input.teamId !== undefined) {
+    if (input.teamId) {
+      const team = check(await db.models.Team.get({ id: input.teamId }), 'Team.get');
+      if (!team || team.organisationId !== organisationId) fail('VALIDATION', 'This team is not part of the organisation.');
+    }
+    out.teamId = input.teamId || null;
+  }
+  if (input.unavailableFrom !== undefined) out.unavailableFrom = v.optionalDate(input.unavailableFrom, 'Absence start');
+  if (input.unavailableUntil !== undefined) out.unavailableUntil = v.optionalDate(input.unavailableUntil, 'Absence end');
+  if (out.unavailableFrom && out.unavailableUntil && out.unavailableUntil < out.unavailableFrom) fail('VALIDATION', 'The end of the absence must be on or after its start.');
+  return out;
+}
 
 const db = await createDataClient(env);
 const cognito = new CognitoIdentityProviderClient({});
@@ -52,7 +69,8 @@ export const handler: Schema['manageTeamMember']['functionHandler'] = (event) =>
         await cognito.send(new AdminCreateUserCommand({ UserPoolId: pool, Username: email, DesiredDeliveryMediums: ['EMAIL'], UserAttributes: [{ Name: 'email', Value: email }, { Name: 'name', Value: name }] }));
         accountCreated = true;
         for (const role of roles) await cognito.send(new AdminAddUserToGroupCommand({ UserPoolId: pool, Username: email, GroupName: role }));
-        const row = check(await db.models.TeamMember.create({ organisationId: input.organisationId, name, email, username, role: roles[0] as typeof VALID[number], roles, jobTitle: input.jobTitle?.trim() || undefined, skills: input.skills ?? [], weeklyCapacityHours: capacity, avatarKey: input.avatarKey }), 'TeamMember.create');
+        const extra = await extraFields(input, input.organisationId);
+        const row = check(await db.models.TeamMember.create({ organisationId: input.organisationId, name, email, username, role: roles[0] as typeof VALID[number], roles, jobTitle: input.jobTitle?.trim() || undefined, skills: input.skills ?? [], weeklyCapacityHours: capacity, avatarKey: input.avatarKey, ...extra }), 'TeamMember.create');
         if (!row) throw new Error('Member profile was not created');
         return row;
       } catch (error) {
@@ -76,10 +94,11 @@ export const handler: Schema['manageTeamMember']['functionHandler'] = (event) =>
     if (normalizeEmail(before.email) !== email) fail('VALIDATION', "The email address of an existing account can't be changed.");
     const accountEmail = normalizeEmail(before.email ?? '');
     const existingRoles = priorRoles;
+    const extra = await extraFields(input, before.organisationId);
     try {
       for (const role of existingRoles) if (!roles.includes(role)) await cognito.send(new AdminRemoveUserFromGroupCommand({ UserPoolId: pool, Username: accountEmail, GroupName: role }));
       for (const role of roles) if (!existingRoles.includes(role)) await cognito.send(new AdminAddUserToGroupCommand({ UserPoolId: pool, Username: accountEmail, GroupName: role }));
-      const updated = check(await db.models.TeamMember.update({ id: before.id, name, username, role: roles[0] as typeof VALID[number], roles, jobTitle: input.jobTitle?.trim() || null, skills: input.skills ?? [], weeklyCapacityHours: capacity, avatarKey: input.avatarKey === undefined ? before.avatarKey : input.avatarKey }), 'TeamMember.update');
+      const updated = check(await db.models.TeamMember.update({ id: before.id, name, username, role: roles[0] as typeof VALID[number], roles, jobTitle: input.jobTitle?.trim() || null, skills: input.skills ?? [], weeklyCapacityHours: capacity, avatarKey: input.avatarKey === undefined ? before.avatarKey : input.avatarKey, ...extra }), 'TeamMember.update');
       if (!updated) fail('NOT_FOUND', 'This member no longer exists.');
       return updated;
     } catch (error) {

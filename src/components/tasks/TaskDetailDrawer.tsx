@@ -11,6 +11,7 @@ import SkillChips from "../team/SkillChips";
 import Modal from "../ui/Modal";
 import BlockReasonNote from "./BlockReasonNote";
 import PriorityBadge from "./PriorityBadge";
+import TaskAttachments from "./TaskAttachments";
 import LoadingState from "../ui/LoadingState";
 
 /** Statuses offered in the drawer's status control (CANCELLED goes through "Cancel task"). */
@@ -199,6 +200,8 @@ function TaskDetailDrawer(props: TaskDetailDrawerProps) {
 
       <h3 className="drawer__section">Blocks</h3>
       <TaskLinks ids={blocksIds(task.id, dependencies)} tasksById={tasksById} onOpenTask={onOpenTask} empty="No task depends on this one." />
+
+      <TaskAttachments taskId={task.id} canUpload={canEdit || canMove} canDelete={canEdit} />
 
       <h3 className="drawer__section">History</h3>
       {historyLoading ? (

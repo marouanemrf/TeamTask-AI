@@ -15,6 +15,9 @@ export interface ProfileInput {
   professionalSummary?: string;
   /** null removes the photo; undefined keeps it. */
   avatarKey?: string | null;
+  /** Planned absence (YYYY-MM-DD); null clears it. */
+  unavailableFrom?: string | null;
+  unavailableUntil?: string | null;
 }
 
 /** Folder of the caller's own photos: only they can write there (storage rule on {entity_id}). */

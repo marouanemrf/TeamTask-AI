@@ -4,6 +4,7 @@ import { check, createDataClient } from '../shared/data';
 import { fail } from '../shared/errors';
 import { runMutation } from '../shared/handler';
 import { normalizeUsername } from '../shared/text';
+import * as v from '../shared/validate';
 
 const db = await createDataClient(env);
 // Self-service photos live under profile-avatars/<identityId>/ (only the owner can write there).
@@ -40,6 +41,9 @@ export const handler: Schema['updateMyProfile']['functionHandler'] = (event) => 
   if (phone && !/^\+?[0-9 ()-]{7,20}$/.test(phone)) fail('VALIDATION', 'Enter a valid phone number.');
   for (const value of [args.name, args.jobTitle, args.experience, args.education, args.professionalSummary]) if (value && value.length > 5000) fail('VALIDATION', 'A profile field is longer than allowed.');
   if ((args.skills ?? []).some((skill) => !skill?.trim() || skill.length > 80)) fail('VALIDATION', 'A skill is empty or too long.');
+  const unavailableFrom = v.optionalDate(args.unavailableFrom, 'Absence start');
+  const unavailableUntil = v.optionalDate(args.unavailableUntil, 'Absence end');
+  if (unavailableFrom && unavailableUntil && unavailableUntil < unavailableFrom) fail('VALIDATION', 'The end of the absence must be on or after its start.');
   const isAdmin = caller.roles.includes('ADMIN');
 
   const members = await listAll((nextToken) => db.models.TeamMember.list({ nextToken, limit: 1000 }), 'TeamMember.list');
@@ -50,6 +54,9 @@ export const handler: Schema['updateMyProfile']['functionHandler'] = (event) => 
     experience: args.experience?.trim() || null,
     education: args.education?.trim() || null,
     professionalSummary: args.professionalSummary?.trim() || null,
+    // Omitted = unchanged (older clients); null clears.
+    ...(args.unavailableFrom !== undefined ? { unavailableFrom } : {}),
+    ...(args.unavailableUntil !== undefined ? { unavailableUntil } : {}),
   };
 
   if (mine) {

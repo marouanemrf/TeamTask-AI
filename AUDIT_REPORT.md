@@ -313,3 +313,27 @@ The AWS session expired during this phase: `npx ampx sandbox --once` could not r
 
 Validation: `tsc` (app, backend, security tests), 137 unit tests, lint (2 older warnings), build, e2e: updates 38, assistant 28, features 84, app 41, project 51, mytasks 41.
 Not deployed yet (AWS session expired): verification enforcement, career suggestions and agent activity need `npm run deploy:sandbox` and Bedrock model access.
+
+
+## Proposal gaps closed (AI planning, approvals, operations)
+
+| Gap (proposal section) | Done | Where |
+|---|---|---|
+| AI task planning: objectives to tasks/subtasks, owners, priorities, dependencies, dates (sections 1, 2, 3.1-3.3, 7 step 3, 10) | Bedrock plan, checked by code, edited and approved by a manager | `amplify/functions/shared/planning.ts`, `plan-workflow`, `ai-planning`, `src/components/projects/AiPlanPanel.tsx` |
+| Step Functions approvals; Approval model used (4, 5, 7 step 5, 11) | Standard state machine with task token, timeout, retries; read-only `AIRecommendation` / `Approval` | `amplify/custom/workflows/resource.ts` |
+| AI weekly summaries and corrective actions (3.6, 8) | Bedrock wording over code-computed facts, rule-based fallback | `amplify/functions/shared/weeklyAi.ts`, `weeklyReport.ts` |
+| S3 attachments (4, 5) | Task drawer, storage path rules | `amplify/storage/resource.ts`, `src/components/tasks/TaskAttachments.tsx` |
+| Teams entity, availability (7 step 1, 3.2) | `Team` model, `unavailableFrom` / `unavailableUntil` | `amplify/data/resource.ts`, Team page, My profile |
+| API Gateway task CRUD (4, 5) | REST facade forwarding to the task functions with the caller's token | `amplify/functions/task-rest` |
+| EventBridge Scheduler, retry/error handling (4, 7 step 5) | Scheduler with retries and DLQ | `amplify/custom/schedules/resource.ts` |
+| CloudTrail, CloudWatch, KMS, immutable audit (4, 5, 11) | Trail, alarms, dashboard, customer-managed keys, Object Lock archive | `amplify/custom/operations/resource.ts`, `audit-archive` |
+| Teams/Slack (1, 4) | Optional webhook (SSM) for reminders, escalations, plans and reports | `amplify/functions/shared/notify.ts` |
+| Pilot measures (7 step 8) | Pilot metrics page | `src/pages/PilotMetricsPage.tsx` |
+
+Still open: AppSync reads are not isolated per organisation (needs an organisation id on every
+model and a data migration), the live security suite and the pilot with real users have not been
+run, SameDayAudit.ai (suggestion only), and the Bedrock Agents service itself (replaced by Converse
+tool use). Not deployed yet.
+
+Validation: 156 unit tests, `tsc` (app and backend), lint (2 older warnings), build, CDK synth
+(branch main), e2e: new proposal suite 31/31, earlier suites passing.

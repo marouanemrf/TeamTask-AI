@@ -3,7 +3,7 @@
 Task management for a cybersecurity consulting team: projects, Kanban, workload, reminders and
 escalations, weekly reports, and a role-aware AI assistant.
 
-## Architecture (as deployed today)
+## Architecture (defined in the repository)
 
 ```mermaid
 flowchart LR
@@ -17,14 +17,27 @@ flowchart LR
   CHAT --> AGENT[Amazon Bedrock Converse API<br/>tool use + Guardrail]
   CHAT --> TOOLS[Lambda assistant-tools<br/>read-only · organisation-scoped]
   TOOLS --> DDB
-  SCHED[Scheduled Lambdas<br/>deadline-check · weekly-report] --> DDB
+  SCHED[EventBridge Scheduler<br/>deadline-check · weekly-report] --> DDB
   SCHED --> SES[Amazon SES]
-  U -->|profile photos| S3[(Amazon S3)]
+  U -->|profile photos and task attachments| S3[(Amazon S3)]
+  PLAN[AI planning Lambda] -->|start / decision| SFN[Step Functions approval workflow]
+  SFN --> PLAN
+  TE[TaskEvent DynamoDB stream] --> ARCHIVE[S3 Object Lock audit archive]
+  OPS[CloudTrail · KMS · CloudWatch alarms/dashboard] -. monitors .-> APIGW
 ```
 
-Not built yet (planned, see `AUDIT_REPORT.md`): replacing AppSync with API Gateway + a single
-DynamoDB table, Step Functions approvals, the Bedrock planning agent, attachments, CloudTrail trail
-and CloudWatch dashboard/alarms.
+The repository defines Step Functions approval for AI task plans, AI weekly reports, EventBridge
+Scheduler retries and dead-letter handling, CloudTrail, a KMS-encrypted Object Lock audit archive,
+and CloudWatch alarms and a dashboard. The assistant and planner use Bedrock Converse with tool use;
+the classic Bedrock Agents service is not used. AppSync remains the web application's GraphQL data
+API; API Gateway provides task REST routes and assistant endpoints. This diagram describes source
+code and does not assert that the latest version is deployed.
+
+There is no verified live pilot or live security-test result in this repository. Cross-organisation
+read isolation remains an open security issue: some AppSync model reads allow any authenticated
+user, so Lambda checks do not protect those direct GraphQL reads. Do not use one shared deployment
+for multiple organisations until this is fixed. See `SECURITY_TEST_REPORT.md` for known limitations
+and live-test status.
 
 ## Setup
 
@@ -96,6 +109,26 @@ and the APIs refuse the account. Uses Cognito's own codes (expiry, single use, r
 - **Agent activity**: "View agent activity" under each answer shows what the assistant did live (tools,
   outcome, duration). The **Agent activity** page lists recorded executions (`GET /assistant/executions`):
   your own, or the whole organisation's for an ADMIN. Questions, answers and tool data are never stored.
+
+## Proposal features
+
+| Feature | How it works |
+|---|---|
+| AI planning (project > **AI plan**, managers) | The scope goes to the approval state machine (Step Functions): Bedrock proposes tasks, subtasks, owners (skills, capacity, planned absence), priorities, estimates, due dates and dependencies; code checks every owner, date and link. The manager edits, then approves or rejects. Tasks are created only after approval, with the normal task rules. No decision within `PLAN_DECISION_DAYS` (default 7) = expired. |
+| Approvals | `AIRecommendation` and `Approval` are read-only for users; only `requestProjectPlan` / `decideRecommendation` and the workflow change them. |
+| AI weekly report | Numbers and risks are computed by code; Bedrock writes the summary and corrective actions (checked: it must quote the real completion rate), otherwise the rule-based text is kept. Labelled AI. |
+| Attachments | Task drawer; S3 `task-attachments/<taskId>/`, 10 MB, PDF/images/Office/text/CSV/JSON/ZIP. Managers and members upload, managers delete. |
+| Teams, planned absence | Team page (teams, lead, filter); absence in My profile; absent members are not suggested as owners. |
+| REST task API | `POST /tasks`, `GET/PATCH /tasks/{id}`, `POST /tasks/{id}/status`, `/assign`, `/close`, `GET /projects/{id}/tasks` (Cognito ID token; optional `Idempotency-Key` UUID). Forwarded to the task functions with the caller's token: same rules as the app. |
+| Scheduled checks | EventBridge Scheduler (daily 07:00 UTC, Fridays 15:00 UTC), 3 retries, dead-letter queue. |
+| Operations | KMS keys (rotation), multi-region CloudTrail with file validation, Object Lock archive of every audit event (governance, 365 days), CloudWatch alarms to an SNS topic, dashboard `TeamTask-<branch>`. |
+| Pilot metrics (managers) | Assignment quality, reminder effectiveness, overdue trend, estimated time saved (from the manager's own assumptions). |
+
+| Setting | Where |
+|---|---|
+| `ALARM_EMAIL` | Amplify console environment variable: email subscribed to the alarm topic (confirm the email AWS sends). |
+| `PLAN_DECISION_DAYS` | Amplify console environment variable (default 7). |
+| `/teamtask/<branch>/notifications/chat-webhook` | Optional SecureString SSM parameter with a Teams or Slack incoming-webhook URL. |
 
 ## Tests
 
