@@ -17,7 +17,6 @@ import { CfnGuardrail, CfnGuardrailVersion } from 'aws-cdk-lib/aws-bedrock';
 import { AttributeType, BillingMode, Table, TableEncryption } from 'aws-cdk-lib/aws-dynamodb';
 import type { ITable } from 'aws-cdk-lib/aws-dynamodb';
 import { PolicyStatement } from 'aws-cdk-lib/aws-iam';
-import { Key } from 'aws-cdk-lib/aws-kms';
 import type { IFunction } from 'aws-cdk-lib/aws-lambda';
 import { LogGroup, RetentionDays } from 'aws-cdk-lib/aws-logs';
 import { StringParameter } from 'aws-cdk-lib/aws-ssm';
@@ -57,20 +56,16 @@ export function defineAssistant(props: AssistantProps) {
   const stack = Stack.of(props.toolsFunction);
   const sandbox = props.deployment === 'sandbox';
 
-  // --- Activity + rate-limit table (customer-managed KMS key, yearly rotation) ---
-  const tableKey = new Key(stack, 'AssistantTableKey', {
-    description: `TeamTask ${props.deployment}: assistant activity and rate-limit table`,
-    enableKeyRotation: true,
-    removalPolicy: sandbox ? RemovalPolicy.DESTROY : RemovalPolicy.RETAIN,
-  });
+  // --- Activity + rate-limit table ---
   const table = new Table(stack, 'AssistantTable', {
     partitionKey: { name: 'pk', type: AttributeType.STRING },
     sortKey: { name: 'sk', type: AttributeType.STRING },
     billingMode: BillingMode.PAY_PER_REQUEST,
     timeToLiveAttribute: 'expiresAt',
     pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
-    encryption: TableEncryption.CUSTOMER_MANAGED,
-    encryptionKey: tableKey,
+    // AWS-owned KMS encryption (what is deployed). Switching to a customer-managed key changes the
+    // table's encryption, which DynamoDB limits per day; the operations key covers the audit data.
+    encryption: TableEncryption.AWS_MANAGED,
     removalPolicy: sandbox ? RemovalPolicy.DESTROY : RemovalPolicy.RETAIN,
   });
 
@@ -268,9 +263,6 @@ export function defineAssistant(props: AssistantProps) {
     TABLE_ORGANISATION: props.tables.Organisation.tableName,
     ALLOWED_ORIGINS: props.allowedOrigins.join(','),
   };
-
-  // The functions using the table also need its KMS key.
-  for (const fn of [props.toolsFunction, props.chatFunction, props.careerFunction, props.activityFunction]) tableKey.grantEncryptDecrypt(fn);
 
   const taskRestEnv: Record<string, string> = { GRAPHQL_URL: props.graphqlUrl, ALLOWED_ORIGINS: props.allowedOrigins.join(',') };
 
