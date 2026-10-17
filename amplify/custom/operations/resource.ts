@@ -65,12 +65,31 @@ export function defineOperations(props: OperationsProps) {
     resources: ['*'],
     conditions: { StringEquals: { 'aws:SourceAccount': stack.account } },
   }));
+  // CloudTrail encrypts the log files with this key: it must be allowed to (only for this account's trails).
+  const trailArn = `arn:aws:cloudtrail:${stack.region}:${stack.account}:trail/teamtask-${props.deployment}`;
+  key.addToResourcePolicy(new PolicyStatement({
+    sid: 'CloudTrailEncryptLogs',
+    actions: ['kms:GenerateDataKey*'],
+    principals: [new ServicePrincipal('cloudtrail.amazonaws.com')],
+    resources: ['*'],
+    conditions: {
+      StringEquals: { 'aws:SourceArn': trailArn },
+      StringLike: { 'kms:EncryptionContext:aws:cloudtrail:arn': `arn:aws:cloudtrail:*:${stack.account}:trail/*` },
+    },
+  }));
+  key.addToResourcePolicy(new PolicyStatement({
+    sid: 'CloudTrailDescribeKey',
+    actions: ['kms:DescribeKey'],
+    principals: [new ServicePrincipal('cloudtrail.amazonaws.com')],
+    resources: ['*'],
+    conditions: { StringEquals: { 'aws:SourceArn': trailArn } },
+  }));
 
   // --- CloudTrail ---
+  // The log files are encrypted by CloudTrail with the key above; the bucket itself uses S3-managed
+  // encryption, so CloudTrail doesn't also need rights on a bucket default key.
   const trailBucket = new Bucket(stack, 'TrailBucket', {
-    encryption: BucketEncryption.KMS,
-    encryptionKey: key,
-    bucketKeyEnabled: true,
+    encryption: BucketEncryption.S3_MANAGED,
     blockPublicAccess: BlockPublicAccess.BLOCK_ALL,
     enforceSSL: true,
     versioned: true,
