@@ -132,7 +132,7 @@ function TeamPage() {
         </ul>
       )}
 
-      {!loading && !error && (
+      {!loading && !error && teamGroups.available && (
         <TeamsPanel teams={teamGroups.teams} members={members} canManage={isManager} busy={teamGroups.busy} error={teamGroups.error} onCreate={teamGroups.create} onDelete={teamGroups.remove} />
       )}
 

@@ -69,11 +69,20 @@ function unwrap(result: Result, fallback: string): Recommendation {
   return result.data;
 }
 
+/** The connected backend has the planning mutations (an older sandbox may not). */
+function assertPlanningDeployed() {
+  if (!(client.mutations as Partial<typeof client.mutations>).requestProjectPlan) {
+    throw new ApiError("AI planning isn't deployed on this backend yet. Deploy the backend to use it.", "VALIDATION");
+  }
+}
+
 export async function requestProjectPlan(projectId: string, scope: string): Promise<Recommendation> {
+  assertPlanningDeployed();
   return unwrap(await client.mutations.requestProjectPlan({ clientRequestId: crypto.randomUUID(), projectId, scope }), "The plan couldn't be requested.");
 }
 
 export async function decidePlan(recommendationId: string, decision: "APPROVED" | "REJECTED", comment: string, tasks?: PlannedTask[]): Promise<Recommendation> {
+  assertPlanningDeployed();
   return unwrap(await client.mutations.decideRecommendation({
     clientRequestId: crypto.randomUUID(),
     recommendationId,

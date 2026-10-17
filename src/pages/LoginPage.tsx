@@ -1,5 +1,6 @@
 import { useState } from "react";
 import LoginLayout from "../components/layout/LoginLayout";
+import BlurText from "../components/reactbits/BlurText";
 import ForgotPasswordForm from "../components/ui/ForgotPasswordForm";
 import LoginForm from "../components/ui/LoginForm";
 import type { LoginFormProps } from "../components/ui/LoginForm";
@@ -19,7 +20,7 @@ function LoginPage({ onSubmit, error, onNewPassword }: LoginPageProps) {
     return (
       <LoginLayout>
         <header className="login-card__header">
-          <h1 className="login-card__title">Choose a new password</h1>
+          <BlurText as="h1" className="login-card__title" text="Choose a new password" delay={90} />
           <p className="login-card__subtitle">Replace your temporary password to finish signing in.</p>
         </header>
         <NewPasswordForm onSubmit={onNewPassword} error={error} />
@@ -31,7 +32,7 @@ function LoginPage({ onSubmit, error, onNewPassword }: LoginPageProps) {
     return (
       <LoginLayout>
         <header className="login-card__header">
-          <h1 className="login-card__title">Reset your password</h1>
+          <BlurText as="h1" className="login-card__title" text="Reset your password" delay={90} />
           <p className="login-card__subtitle">We'll email you a code to choose a new password.</p>
         </header>
         <ForgotPasswordForm
@@ -48,7 +49,7 @@ function LoginPage({ onSubmit, error, onNewPassword }: LoginPageProps) {
   return (
     <LoginLayout>
       <header className="login-card__header">
-        <h1 className="login-card__title">Sign in</h1>
+        <BlurText as="h1" className="login-card__title" text="Sign in" delay={90} />
         <p className="login-card__subtitle">Access your Team Task workspace.</p>
       </header>
       <LoginForm

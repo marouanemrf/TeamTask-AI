@@ -3446,3 +3446,159 @@ img.avatar {
   .login-theme-toggle span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
   .login-theme-toggle { width: 38px; padding: 0; justify-content: center; }
 }
+
+/* ==========================================================================
+   Design refinements (shared by every page)
+   One visual language: calm surfaces, clear hierarchy, consistent states.
+   ========================================================================== */
+:root {
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.18);
+  --shadow-md: 0 8px 24px -12px rgb(0 0 0 / 0.45);
+  --shadow-lg: 0 24px 48px -20px rgb(0 0 0 / 0.55);
+}
+:root[data-theme="light"] {
+  --shadow-sm: 0 1px 2px rgb(15 23 42 / 0.06);
+  --shadow-md: 0 8px 24px -12px rgb(15 23 42 / 0.18);
+  --shadow-lg: 0 24px 48px -20px rgb(15 23 42 / 0.25);
+}
+::selection { color: var(--color-on-primary); background: rgb(var(--primary-rgb) / 0.85); }
+
+/* Typography */
+h1, h2, h3, h4 { letter-spacing: -0.01em; }
+.stat-card__value, .data-table td, .kanban__count, .badge { font-variant-numeric: tabular-nums; }
+
+/* Buttons: hover lifts, press settles, focus is always visible */
+.button-primary,
+.button-secondary,
+.button-danger {
+  transition: background-color var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast), box-shadow var(--transition-fast), transform 120ms var(--ease-out);
+}
+.button-primary:hover:not(:disabled) { box-shadow: 0 6px 16px -8px rgb(var(--primary-rgb) / 0.7); transform: translateY(-1px); }
+.button-secondary:hover:not(:disabled) { border-color: rgb(var(--primary-rgb) / 0.5); color: var(--color-text); }
+.button-danger:hover:not(:disabled) { background: rgb(var(--error-rgb) / 0.1); border-color: var(--color-error); }
+.button-primary:active:not(:disabled),
+.button-secondary:active:not(:disabled),
+.button-danger:active:not(:disabled) { transform: translateY(0) scale(0.98); box-shadow: none; }
+.button-primary:focus-visible,
+.button-secondary:focus-visible,
+.icon-button:focus-visible,
+.tabs__tab:focus-visible,
+.sidebar__link:focus-visible,
+.text-link:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.button-danger:focus-visible { outline: none; box-shadow: var(--focus-ring-error); }
+.button-primary:disabled,
+.button-secondary:disabled,
+.button-danger:disabled { cursor: not-allowed; opacity: 0.55; transform: none; box-shadow: none; }
+.icon-button { transition: background-color var(--transition-fast), color var(--transition-fast); }
+.icon-button:active:not(:disabled) { transform: scale(0.94); }
+
+/* Inputs: hover, focus, error, disabled */
+.form-input,
+.form-textarea { transition: border-color var(--transition-fast), box-shadow var(--transition-fast), background-color var(--transition-fast); }
+.form-input[aria-invalid="true"],
+.form-textarea[aria-invalid="true"] { border-color: var(--color-error); }
+.form-input[aria-invalid="true"]:focus,
+.form-textarea[aria-invalid="true"]:focus { box-shadow: var(--focus-ring-error); }
+.form-input:disabled,
+.form-textarea:disabled { cursor: not-allowed; opacity: 0.6; }
+.form-field__label { color: var(--color-text); letter-spacing: 0.005em; }
+.form-field__error { display: flex; align-items: center; gap: 6px; margin-top: 2px; font-weight: 500; }
+.form-field__error::before { content: ""; flex: none; width: 6px; height: 6px; background: currentColor; border-radius: 50%; }
+
+/* Sidebar: the current page is unmistakable */
+.sidebar__link { position: relative; }
+.sidebar__link--active { font-weight: 600; }
+.sidebar__link--active::before {
+  content: "";
+  position: absolute;
+  left: -12px;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  background: var(--color-primary);
+  border-radius: 0 3px 3px 0;
+}
+.sidebar__link .icon { transition: transform 160ms var(--ease-out); }
+.sidebar__link:hover .icon { transform: translateX(2px); }
+.sidebar__brand .sidebar__name { letter-spacing: -0.01em; }
+
+/* Top bar title (BlurText) */
+.topbar__title { font-size: 1.25rem; font-weight: 700; letter-spacing: -0.015em; }
+.blur-text { display: block; }
+.blur-text__piece { display: inline-block; will-change: transform, opacity; }
+
+/* Panels and section titles */
+.panel { box-shadow: var(--card-shadow); }
+.panel__title { font-size: 1rem; font-weight: 650; letter-spacing: -0.005em; }
+.panel__title--spaced { margin-top: var(--space-2); }
+
+/* Stat cards */
+.stat-card__label { font-size: var(--font-size-sm); font-weight: 600; letter-spacing: 0.01em; }
+.stat-card__value { font-size: 2rem; font-weight: 700; letter-spacing: -0.03em; }
+.stat-card__hint { line-height: 1.4; }
+
+/* Skeletons (only where a value is loading) */
+.skeleton {
+  display: inline-block;
+  vertical-align: middle;
+  background: linear-gradient(90deg, rgb(var(--tint-rgb) / 0.06) 25%, rgb(var(--tint-rgb) / 0.12) 37%, rgb(var(--tint-rgb) / 0.06) 63%);
+  background-size: 400% 100%;
+  border-radius: 6px;
+  animation: skeleton-shimmer 1.4s ease infinite;
+}
+.skeleton--value { width: 3.5rem; height: 1.6rem; }
+@keyframes skeleton-shimmer { 0% { background-position: 100% 50%; } 100% { background-position: 0 50%; } }
+
+/* Tables: readable rows, quiet header, row feedback */
+.data-table thead th { background: rgb(var(--tint-rgb) / 0.025); }
+.data-table tbody tr { transition: background-color var(--transition-fast); }
+.data-table tbody tr:hover { background: rgb(var(--primary-rgb) / 0.04); }
+.data-table tbody tr:last-child td { border-bottom: 0; }
+.table-wrapper { border-color: var(--card-border); box-shadow: var(--card-shadow); }
+
+/* Tabs */
+.tabs { border-color: var(--card-border); box-shadow: var(--card-shadow); }
+.tabs__tab { transition: background-color var(--transition-fast), color var(--transition-fast); }
+.tabs__tab:hover:not([aria-selected="true"]) { background: rgb(var(--tint-rgb) / 0.05); }
+.tabs__tab[aria-selected="true"] { box-shadow: 0 4px 12px -6px rgb(var(--primary-rgb) / 0.8); }
+
+/* Empty states: muted inline; as a page block, centred and clearly "nothing here yet" */
+.empty-state { color: var(--color-muted); }
+.empty-state.panel { text-align: center; }
+.empty-state.panel { padding: var(--space-7) var(--space-5); border-style: dashed; background: rgb(var(--tint-rgb) / 0.015); box-shadow: none; }
+.loading-state.panel { border-style: solid; }
+
+/* Badges */
+.badge { letter-spacing: 0.01em; line-height: 1.5; }
+
+/* Modals and drawers: short entrance, softer backdrop */
+.modal[open] { box-shadow: var(--shadow-lg); animation: modal-in 220ms var(--ease-out); }
+.modal--drawer[open] { animation: drawer-in 260ms var(--ease-out); }
+.modal[open]::backdrop { animation: backdrop-in 220ms ease-out; }
+.modal__footer { background: rgb(var(--tint-rgb) / 0.015); }
+@keyframes modal-in { from { opacity: 0; transform: translateY(8px) scale(0.985); } to { opacity: 1; transform: none; } }
+@keyframes drawer-in { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: none; } }
+@keyframes backdrop-in { from { opacity: 0; } to { opacity: 1; } }
+
+/* Login primary action (React Bits StarBorder) keeps the app's button metrics */
+.login-cta.star-border { height: var(--button-height); min-height: var(--button-height); padding: 0 var(--button-padding-x); font-weight: 600; border-radius: var(--radius-md); }
+.login-cta.star-border:hover:not(:disabled) { background: var(--color-primary-hover); }
+.login-cta.star-border:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.login-card__title.blur-text { display: block; }
+
+/* Reduced motion: content is there at once, nothing decorative moves */
+@media (prefers-reduced-motion: reduce) {
+  .button-primary:hover:not(:disabled),
+  .sidebar__link:hover .icon { transform: none; }
+  .modal[open], .modal--drawer[open], .modal[open]::backdrop { animation: none; }
+  .skeleton { animation: none; }
+}
+
+/* Stat rows: as many equal cards as fit (5 metrics stay on one row on desktop) */
+@media (min-width: 1024px) {
+  .stat-grid:not(.stat-grid--three) { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+}
+
+/* The StarBorder light bleeds 48px around the button: keep it inside the card (no page overflow). */
+.login-card { overflow: hidden; }

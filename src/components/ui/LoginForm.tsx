@@ -1,6 +1,8 @@
 import { useEffect, useId, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
 import { validateEmail, validateRequiredPassword } from "../../utils/validation";
+import { useTheme } from "../../hooks/useTheme";
+import StarBorder from "../reactbits/StarBorder";
 
 export interface LoginFormProps {
   onSubmit?: (email: string, password: string) => Promise<void>;
@@ -27,6 +29,7 @@ function wait(ms: number): Promise<void> {
 
 function LoginForm({ onSubmit, error, onForgotPassword, initialEmail = "", notice }: LoginFormProps) {
   const id = useId();
+  const { theme } = useTheme();
   const emailId = `${id}-email`;
   const passwordId = `${id}-password`;
   const emailErrorId = `${id}-email-error`;
@@ -43,7 +46,6 @@ function LoginForm({ onSubmit, error, onForgotPassword, initialEmail = "", notic
   const submittingRef = useRef(false);
   const emailRef = useRef<HTMLInputElement>(null);
   const passwordRef = useRef<HTMLInputElement>(null);
-  const submitRef = useRef<HTMLButtonElement>(null);
   const wasLoadingRef = useRef(false);
 
   const alertMessage = submitError ?? error;
@@ -52,10 +54,10 @@ function LoginForm({ onSubmit, error, onForgotPassword, initialEmail = "", notic
   // button once the request settles so keyboard users keep their place.
   useEffect(() => {
     if (wasLoadingRef.current && !isLoading && document.activeElement === document.body) {
-      submitRef.current?.focus();
+      document.getElementById(`${id}-submit`)?.focus();
     }
     wasLoadingRef.current = isLoading;
-  }, [isLoading]);
+  }, [isLoading, id]);
 
   function handleEmailChange(event: ChangeEvent<HTMLInputElement>) {
     const value = event.target.value;
@@ -207,10 +209,24 @@ function LoginForm({ onSubmit, error, onForgotPassword, initialEmail = "", notic
           </div>
         )}
 
-        <button ref={submitRef} type="submit" className="button-primary button--block">
+        {/* Primary action: React Bits StarBorder, one slow light along the edge (still with reduced motion). */}
+        <StarBorder
+          id={`${id}-submit`}
+          type="submit"
+          className="button-primary button--block login-cta"
+          color={theme === "light" ? "#29B6E8" : "#7DDCF2"}
+          backgroundColor="var(--color-primary)"
+          textColor="var(--color-on-primary)"
+          borderColor="transparent"
+          radius={10}
+          thickness={1.5}
+          glow={0.45}
+          duration={5}
+          theme={theme}
+        >
           {isLoading && <span className="spinner" aria-hidden="true" />}
           <span>{isLoading ? "Signing in…" : "Sign in"}</span>
-        </button>
+        </StarBorder>
 
         <p className="form-helper">No account? Contact your administrator.</p>
       </fieldset>

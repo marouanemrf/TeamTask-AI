@@ -6,7 +6,15 @@ import { client } from "./client";
 /** Teams inside the organisation (e.g. "Cloud security", "GRC"). Managers create and delete them. */
 export type TeamGroup = Schema["Team"]["type"];
 
+/** False when the connected backend predates the Team model (e.g. an older sandbox): no teams then. */
+export const teamsAvailable = () => !!(client.models as Partial<typeof client.models>).Team;
+
 export function observeTeams(organisationId: string, onChange: (teams: TeamGroup[]) => void, onError: (err: unknown) => void): () => void {
+  if (!teamsAvailable()) {
+    console.warn("[teamGroupService] The backend has no Team model yet: deploy the backend to use teams.");
+    onChange([]);
+    return () => undefined;
+  }
   const sub = client.models.Team.observeQuery({ filter: { organisationId: { eq: organisationId } } }).subscribe({
     next: ({ items }) => onChange([...items].sort((a, b) => a.name.localeCompare(b.name))),
     error: onError,

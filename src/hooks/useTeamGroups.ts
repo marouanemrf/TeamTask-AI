@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { createTeam, deleteTeam, observeTeams } from "../services/teamGroupService";
+import { createTeam, deleteTeam, observeTeams, teamsAvailable } from "../services/teamGroupService";
 import type { TeamGroup } from "../services/teamGroupService";
 import { describeApiError } from "../utils/apiErrors";
 import { useUser } from "./useUser";
@@ -38,6 +38,8 @@ export function useTeamGroups() {
   }, []);
 
   return {
+    /** The backend supports teams (hide the Teams panel otherwise). */
+    available: teamsAvailable(),
     teams: teams && teams.org === organisationId ? teams.items : [],
     busy,
     error,

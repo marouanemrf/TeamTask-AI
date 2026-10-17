@@ -11,6 +11,9 @@ import PresenceDot from "../team/PresenceDot";
 import { ChartIcon, ChatIcon, CloseIcon, DashboardIcon, FlagIcon, FolderIcon, MenuIcon, ProfileIcon, ShieldIcon, SignOutIcon, TasksIcon, TeamIcon } from "../ui/Icons";
 import ThemeToggle from "../ui/ThemeToggle";
 import BrandLogo from "../ui/BrandLogo";
+import BlurText from "../reactbits/BlurText";
+import SmoothScroll from "../../motion/SmoothScroll";
+import { useReveal } from "../../motion/useReveal";
 
 interface NavItem {
   to: string;
@@ -40,6 +43,7 @@ function AppLayout() {
   const me = email ? members.find((m) => normalizeEmail(m.email) === normalizeEmail(email)) : undefined;
   const { pathname } = useLocation();
   const title = pageTitle(pathname);
+  useReveal("#main-content", pathname);
   const profileActive = pathname.startsWith(ROUTES.profile);
   const [navOpen, setNavOpen] = useState(false);
 
@@ -136,7 +140,7 @@ function AppLayout() {
           >
             <MenuIcon />
           </button>
-          <h1 className="topbar__title">{title}</h1>
+          <BlurText key={title} as="h1" className="topbar__title" text={title} delay={60} stepDuration={0.4} blur={8} distance={6} />
           <div className="topbar__user">
             {/* Only the user's picture and presence; falls back to email initials before a team profile exists. */}
             {email && (
@@ -157,6 +161,7 @@ function AppLayout() {
           <Outlet />
         </main>
       </div>
+      <SmoothScroll />
       {/* The TeamTask assistant, for every role (permissions are applied by the server tools). */}
       <AssistantWidget />
     </div>
