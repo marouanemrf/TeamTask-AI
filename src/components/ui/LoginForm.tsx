@@ -5,6 +5,12 @@ import { validateEmail, validateRequiredPassword } from "../../utils/validation"
 export interface LoginFormProps {
   onSubmit?: (email: string, password: string) => Promise<void>;
   error?: string;
+  /** Opens the forgotten-password flow with the email typed so far. */
+  onForgotPassword?: (email: string) => void;
+  /** Email to prefill (e.g. after a password reset). */
+  initialEmail?: string;
+  /** Confirmation shown above the form (e.g. "Password changed"). */
+  notice?: string;
 }
 
 interface FieldErrors {
@@ -19,14 +25,14 @@ function wait(ms: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
-function LoginForm({ onSubmit, error }: LoginFormProps) {
+function LoginForm({ onSubmit, error, onForgotPassword, initialEmail = "", notice }: LoginFormProps) {
   const id = useId();
   const emailId = `${id}-email`;
   const passwordId = `${id}-password`;
   const emailErrorId = `${id}-email-error`;
   const passwordErrorId = `${id}-password-error`;
 
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(initialEmail);
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState<FieldErrors>({});
@@ -185,10 +191,14 @@ function LoginForm({ onSubmit, error }: LoginFormProps) {
         </div>
 
         <div className="form-row-end">
-          <a className="text-link" href="#">
+          <button type="button" className="text-link text-button" onClick={() => onForgotPassword?.(email.trim())}>
             Forgot password?
-          </a>
+          </button>
         </div>
+
+        {notice && !alertMessage && (
+          <p className="notice" role="status">{notice}</p>
+        )}
 
         {alertMessage && (
           <div className="form-alert" role="alert">

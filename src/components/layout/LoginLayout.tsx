@@ -1,6 +1,7 @@
 import { Component, lazy, Suspense, useCallback, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import BrandLogo from "../ui/BrandLogo";
+import ThemeToggle from "../ui/ThemeToggle";
 
 const LoginScene3D = lazy(() => import("./LoginScene3D"));
 
@@ -54,27 +55,11 @@ function ScenePlaceholder() {
   return <div className="scene-placeholder" aria-hidden="true" />;
 }
 
+/** No WebGL: the official logo as a picture. */
 function StaticShield() {
   return (
     <div className="scene-placeholder scene-fallback" aria-hidden="true">
-      <svg className="static-shield" viewBox="0 0 120 140" fill="none">
-        <path
-          className="static-shield__outer"
-          d="M60 6 92 16 112 18v52c0 30-22 52-52 64C30 122 8 100 8 70V18l20-2Z"
-          strokeWidth="2"
-          strokeLinejoin="round"
-        />
-        <path
-          className="static-shield__inner"
-          d="M60 20 84 27 98 28v42c0 23-16 40-38 50-22-10-38-27-38-50V28l14-1Z"
-          strokeWidth="1.5"
-          strokeLinejoin="round"
-        />
-        <path className="static-shield__shackle" d="M48 64v-9a12 12 0 0 1 24 0v9" strokeWidth="5" strokeLinecap="round" />
-        <rect className="static-shield__body" x="40" y="62" width="40" height="30" rx="4" />
-        <circle className="static-shield__keyhole" cx="60" cy="74" r="3.5" />
-        <rect className="static-shield__keyhole" x="58.5" y="75" width="3" height="8" rx="1.5" />
-      </svg>
+      <BrandLogo large className="scene-fallback__logo" />
     </div>
   );
 }
@@ -143,6 +128,7 @@ function LoginLayout({ children }: LoginLayoutProps) {
     <>
       {loaderMounted && <PageLoader leaving={ready} />}
       <div className="login-layout" inert={!ready} aria-hidden={!ready || undefined}>
+        <ThemeToggle className="login-theme-toggle" />
         <div className="login-visual">
           <div className="login-visual__scene">
             {sceneAvailable ? (

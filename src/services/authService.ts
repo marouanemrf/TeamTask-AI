@@ -1,5 +1,5 @@
 import "./amplifyConfig";
-import { confirmSignIn, confirmUserAttribute, fetchAuthSession, fetchUserAttributes, sendUserAttributeVerificationCode, signIn, signOut } from "aws-amplify/auth";
+import { confirmResetPassword, confirmSignIn, confirmUserAttribute, fetchAuthSession, fetchUserAttributes, resetPassword, sendUserAttributeVerificationCode, signIn, signOut } from "aws-amplify/auth";
 import type { SignInOutput } from "aws-amplify/auth";
 
 /** Outcome of a sign-in step, reduced to what the UI needs to know. */
@@ -26,6 +26,21 @@ export async function signInWithEmail(email: string, password: string): Promise<
 /** Answers the first-login challenge for administrator-created accounts. */
 export async function completeNewPassword(newPassword: string): Promise<SignInResult> {
   return toResult(await confirmSignIn({ challengeResponse: newPassword }));
+}
+
+/**
+ * Forgotten password, step 1: Cognito emails a reset code. Returns the masked address it went to
+ * (when Cognito says). For an unknown email the user pool answers the same way, so the UI never
+ * learns whether an account exists.
+ */
+export async function requestPasswordReset(email: string): Promise<string | undefined> {
+  const { nextStep } = await resetPassword({ username: email.trim() });
+  return nextStep.codeDeliveryDetails?.destination;
+}
+
+/** Step 2: the code from the email and the new password. */
+export async function confirmPasswordReset(email: string, code: string, newPassword: string): Promise<void> {
+  await confirmResetPassword({ username: email.trim(), confirmationCode: code.trim(), newPassword });
 }
 
 export async function signOutUser(): Promise<void> {

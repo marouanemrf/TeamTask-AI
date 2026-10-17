@@ -3413,3 +3413,36 @@ img.avatar {
 @media (prefers-reduced-motion: reduce) {
   .assistant-status--processing .assistant-status__dot { animation: none; }
 }
+
+/* Login: theme switch (top right) and the logo when WebGL isn't available */
+.login-layout { position: relative; }
+.login-theme-toggle {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: 38px;
+  padding: 0 14px;
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  background: var(--color-surface-glass);
+  border: 1px solid var(--card-border);
+  border-radius: 999px;
+  box-shadow: var(--card-shadow);
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  transition: border-color var(--transition-fast), color var(--transition-fast);
+}
+.login-theme-toggle:hover { color: var(--color-primary); border-color: var(--card-border-hover); }
+.login-theme-toggle:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.login-theme-toggle .icon { width: 18px; height: 18px; }
+.scene-fallback__logo { width: min(200px, 50%); height: auto; aspect-ratio: 1; border-radius: 28px; }
+@media (max-width: 600px) {
+  .login-theme-toggle span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .login-theme-toggle { width: 38px; padding: 0; justify-content: center; }
+}

@@ -8,7 +8,7 @@ export function describeAuthError(err: unknown): string {
     case "InvalidPasswordException":
       return "This password doesn't meet the security policy.";
     case "PasswordResetRequiredException":
-      return "A password reset is required. Contact your administrator.";
+      return "A password reset is required. Use “Forgot password?” to get a code by email.";
     case "LimitExceededException":
     case "TooManyRequestsException":
       return "Too many attempts. Please wait a moment and try again.";
@@ -35,5 +35,35 @@ export function describeVerificationError(err: unknown): string {
       return "Your session has expired. Sign in again.";
     default:
       return "Verification failed. Please try again.";
+  }
+}
+
+/** Messages for the forgotten-password flow (never says whether the account exists). */
+export function describeResetError(err: unknown): string {
+  const name = err instanceof Error ? err.name : "";
+  const message = err instanceof Error ? err.message : "";
+  switch (name) {
+    case "CodeMismatchException":
+    case "UserNotFoundException": // same answer as a wrong code: no account enumeration
+      return "This code is incorrect. Check the latest email and try again.";
+    case "ExpiredCodeException":
+      return "This code has expired. Send a new code.";
+    case "InvalidPasswordException":
+      return "This password doesn't meet the security policy.";
+    case "LimitExceededException":
+    case "TooManyRequestsException":
+    case "TooManyFailedAttemptsException":
+      return "Too many attempts. Wait a few minutes before trying again.";
+    case "CodeDeliveryFailureException":
+      return "The email couldn't be sent. Try again later or contact your administrator.";
+    case "NotAuthorizedException":
+    case "InvalidParameterException":
+      // Accounts created by an administrator that never signed in can't reset yet.
+      if (/current state|unverified|no registered\/verified/i.test(message)) {
+        return "This account can't reset its password yet. Sign in with the temporary password from your invitation email, or contact your administrator.";
+      }
+      return "The password couldn't be reset. Contact your administrator.";
+    default:
+      return "Something went wrong. Please try again.";
   }
 }
