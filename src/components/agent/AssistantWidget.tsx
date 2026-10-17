@@ -52,6 +52,7 @@ function AssistantWidget() {
         onClick={() => (open ? close() : show())}
       >
         <AgentOrb3D state={orbState} size={56} />
+        {!open && <span className="assistant-launcher__label" aria-hidden="true">Ask AI</span>}
       </button>
     </>
   );

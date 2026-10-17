@@ -2,6 +2,7 @@ import { useId, useState } from "react";
 import type { FormEvent } from "react";
 import type { TeamMember } from "../../services/client";
 import type { TeamGroup } from "../../services/teamGroupService";
+import { useToastMessage } from "../../hooks/useToast";
 
 interface Props {
   teams: readonly TeamGroup[];
@@ -16,6 +17,7 @@ interface Props {
 /** Teams of the organisation: name, lead, members. Managers add teams and delete empty ones. */
 function TeamsPanel({ teams, members, canManage, busy, error, onCreate, onDelete }: Props) {
   const id = useId();
+  useToastMessage(error, "error");
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [lead, setLead] = useState("");
@@ -66,7 +68,6 @@ function TeamsPanel({ teams, members, canManage, busy, error, onCreate, onDelete
           </table>
         </div>
       )}
-      {error && <div className="form-alert" role="alert"><span>{error}</span></div>}
       {canManage && (
         <form className="teams-panel__form" onSubmit={(e) => void handleSubmit(e)} noValidate>
           <div className="form-field">

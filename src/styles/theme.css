@@ -41,6 +41,12 @@
   --color-error-bg: rgb(var(--error-rgb) / 0.1);
   --color-error-border: rgb(var(--error-rgb) / 0.4);
   --focus-ring: 0 0 0 3px rgb(var(--primary-rgb) / 0.3);
+
+  /* Cards: a defined border, a brand-coloured border and soft shadow on hover (interactive cards). */
+  --card-border: rgb(var(--tint-rgb) / 0.12);
+  --card-border-hover: rgb(var(--primary-rgb) / 0.5);
+  --card-shadow: none;
+  --card-shadow-hover: 0 8px 24px -12px rgb(0 0 0 / 0.55);
   --focus-ring-error: 0 0 0 3px rgb(var(--error-rgb) / 0.28);
 
   /* 3D scene materials (read by LoginScene3D through utils/cssVar) */
@@ -79,13 +85,14 @@
 
 /* --------------------------------------------------------------------------
    Light mode (html[data-theme="light"], set by utils/theme.ts)
-   Same tokens, darker brand colours so text keeps WCAG AA contrast on white.
+   Gogo Security logo palette: royal blue (#035AD2), electric cyan (#29B6E8 / #7DDCF2) and
+   silver (#C2C7CB). Text colours keep WCAG AA contrast on white.
    -------------------------------------------------------------------------- */
 :root[data-theme="light"] {
-  --color-background: #F3F5F9;
+  --color-background: #F1F4F8;
   --color-surface: #FFFFFF;
-  --color-primary: #0B7A66;
-  --color-accent: #2563EB;
+  --color-primary: #035AD2;
+  --color-accent: #0B74B5;
   --color-text: #0F172A;
   --color-muted: #566074;
   --color-error: #C62828;
@@ -97,21 +104,28 @@
 
   --tint-rgb: 15 23 42;
   --surface-rgb: 255 255 255;
-  --background-rgb: 243 245 249;
-  --primary-rgb: 11 122 102;
-  --accent-rgb: 37 99 235;
+  --background-rgb: 241 244 248;
+  --primary-rgb: 3 90 210;
+  --accent-rgb: 11 116 181;
   --warning-rgb: 161 92 7;
   --purple-rgb: 109 40 217;
   --gray-rgb: 71 85 105;
   --error-rgb: 198 40 40;
 
-  --color-primary-hover: #0A6B5A;
-  --color-primary-active: #085A4B;
+  --color-primary-hover: #0A4DB0;
+  --color-primary-active: #083F91;
   --color-on-primary: #FFFFFF;
   --color-input: #FFFFFF;
-  --color-input-hover: #F8FAFC;
-  --color-border: rgb(15 23 42 / 0.12);
-  --color-border-strong: rgb(15 23 42 / 0.22);
+  --color-input-hover: #F7F9FC;
+  /* Silver of the logo, a little darker so borders stay visible on white. */
+  --color-border: #D6DBE2;
+  --color-border-strong: #B4BCC7;
+
+  --card-border: #D6DBE2;
+  --card-border-hover: rgb(3 90 210 / 0.45);
+  --card-shadow: 0 1px 2px rgb(15 23 42 / 0.04);
+  --card-shadow-hover: 0 8px 20px -10px rgb(3 90 210 / 0.25);
+  --brand-cyan: #29B6E8;
 
   --scene-shield: #9AA8C4;
   --scene-plate: #DCE2EC;
@@ -355,8 +369,8 @@ p {
 
 .login-brand__mark {
   flex: none;
-  width: 22px;
-  height: 22px;
+  width: 30px;
+  height: 30px;
   color: var(--color-primary);
 }
 
@@ -418,8 +432,8 @@ p {
   }
 
   .login-brand__mark {
-    width: 30px;
-    height: 30px;
+    width: 40px;
+    height: 40px;
   }
 
   .login-brand__tagline {
@@ -2968,8 +2982,8 @@ img.avatar {
 }
 
 .page-loader .login-brand__mark {
-  width: 36px;
-  height: 36px;
+  width: 52px;
+  height: 52px;
 }
 
 .page-loader__spinner {
@@ -3244,3 +3258,158 @@ img.avatar {
 
 /* Teams (Team page) */
 .teams-panel__form { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--space-3); align-items: end; margin-top: var(--space-4); }
+
+/* --------------------------------------------------------------------------
+   Cards: consistent border, radius and hover (tokens --card-*, both themes)
+   -------------------------------------------------------------------------- */
+.panel,
+.stat-card,
+.member-card,
+.task-card,
+.suggestion-card {
+  border-color: var(--card-border);
+  box-shadow: var(--card-shadow);
+}
+/* Cards with a coloured left edge (status / quadrant) keep it. */
+.my-task,
+.eisenhower-card {
+  border-top-color: var(--card-border);
+  border-right-color: var(--card-border);
+  border-bottom-color: var(--card-border);
+  box-shadow: var(--card-shadow);
+}
+.stat-card--link,
+.member-card,
+.task-card,
+.my-task,
+.eisenhower-card {
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast);
+}
+.stat-card--link:hover,
+.member-card:hover,
+.task-card:hover {
+  border-color: var(--card-border-hover);
+  box-shadow: var(--card-shadow-hover);
+}
+.my-task:hover,
+.eisenhower-card:hover {
+  border-top-color: var(--card-border-hover);
+  border-right-color: var(--card-border-hover);
+  border-bottom-color: var(--card-border-hover);
+  box-shadow: var(--card-shadow-hover);
+}
+
+/* Official logo (white tile, so it reads the same in both themes) */
+.brand-logo {
+  display: block;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  padding: 1px;
+  object-fit: contain;
+  background: #fff;
+  border: 1px solid var(--card-border);
+  border-radius: 10px;
+}
+.brand-logo--lg { width: 56px; height: 56px; border-radius: 14px; }
+
+/* --------------------------------------------------------------------------
+   Notifications (toasts): top right, stacked, in the top layer (popover)
+   -------------------------------------------------------------------------- */
+.toaster {
+  position: fixed;
+  inset: 16px 16px auto auto;
+  width: min(380px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  margin: 0;
+  padding: 0;
+  overflow: visible;
+  color: var(--color-text);
+  background: transparent;
+  border: 0;
+}
+.toaster:popover-open { display: flex; flex-direction: column; gap: var(--space-2); }
+.toast {
+  --toast-color: var(--color-blue);
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: start;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-3) calc(var(--space-3) + 2px) var(--space-4);
+  overflow: hidden;
+  background: var(--color-surface);
+  border: 1px solid var(--card-border);
+  border-left: 4px solid var(--toast-color);
+  border-radius: var(--radius-md);
+  box-shadow: 0 12px 32px -12px rgb(0 0 0 / 0.45);
+  animation: toast-in 220ms ease-out;
+}
+.toast--success { --toast-color: var(--color-success); }
+.toast--error { --toast-color: var(--color-error); }
+.toast--warning { --toast-color: var(--color-warning); }
+.toast--info { --toast-color: var(--color-primary); }
+.toast--leaving { animation: toast-out 200ms ease-in forwards; }
+.toast__icon { width: 10px; height: 10px; margin-top: 6px; background: var(--toast-color); border-radius: 50%; box-shadow: 0 0 0 4px color-mix(in srgb, var(--toast-color) 18%, transparent); }
+.toast__body { min-width: 0; }
+.toast__title { margin: 0; font-size: var(--font-size-sm); font-weight: 600; }
+.toast__message { margin: 2px 0 0; color: var(--color-muted); font-size: var(--font-size-sm); overflow-wrap: anywhere; }
+.toast__close { width: 28px; height: 28px; margin: -4px -4px 0 0; }
+.toast__timer { position: absolute; left: 0; bottom: 0; height: 2px; width: 100%; background: var(--toast-color); opacity: .55; transform-origin: left; animation-name: toast-timer; animation-timing-function: linear; animation-fill-mode: forwards; }
+@keyframes toast-in { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+@keyframes toast-out { to { opacity: 0; transform: translateX(16px); } }
+@keyframes toast-timer { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+@media (max-width: 600px) {
+  .toaster { inset: 12px 12px auto 12px; width: auto; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .toast, .toast--leaving { animation: none; }
+  .toast--leaving { opacity: 0; }
+}
+
+/* --------------------------------------------------------------------------
+   AI assistant panel: header, status, welcome card, composer
+   -------------------------------------------------------------------------- */
+.assistant-panel__header { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: var(--space-1) var(--space-3); padding: var(--space-4); background: linear-gradient(135deg, rgb(var(--primary-rgb) / .10), rgb(var(--accent-rgb) / .05) 60%, transparent); border-bottom: 1px solid var(--card-border); }
+.assistant-panel__avatar { display: inline-flex; padding: 3px; border: 1px solid rgb(var(--primary-rgb) / .35); border-radius: 50%; background: var(--color-surface); }
+.assistant-panel__heading h2 { margin: 0; font-size: 1.0625rem; font-weight: 700; }
+.assistant-panel__subtitle { margin: 2px 0 6px; color: var(--color-muted); font-size: var(--font-size-xs); }
+.assistant-panel__tools { display: flex; gap: var(--space-1); align-self: start; }
+.assistant-panel__history { grid-column: 2 / -1; justify-self: start; font-size: var(--font-size-xs); }
+.assistant-status { --status-color: var(--color-success); position: relative; display: inline-flex; white-space: nowrap; align-items: center; gap: 6px; margin: 0; padding: 2px 10px 2px 8px; font-size: var(--font-size-xs); background: color-mix(in srgb, var(--status-color) 12%, transparent); border: 1px solid color-mix(in srgb, var(--status-color) 40%, transparent); border-radius: 999px; }
+.assistant-status__label { font-weight: 600; color: var(--color-text); }
+/* The hint is for screen readers (the pill stays on one line). */
+.assistant-status__hint { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.assistant-status__dot { width: 8px; height: 8px; background: var(--status-color); border-radius: 50%; }
+.assistant-status--processing { --status-color: var(--color-primary); }
+.assistant-status--processing .assistant-status__dot { animation: assistant-pulse 1s ease-in-out infinite; }
+.assistant-status--offline { --status-color: var(--color-gray); }
+.assistant-status--error { --status-color: var(--color-error); }
+@keyframes assistant-pulse { 50% { opacity: .35; transform: scale(.8); } }
+.assistant-panel__access { padding: var(--space-3) var(--space-4); margin: var(--space-3) var(--space-4) 0; background: rgb(var(--tint-rgb) / .03); border: 1px solid var(--card-border); border-radius: var(--radius-md); }
+.agent-chat__welcome { display: grid; gap: var(--space-2); padding: var(--space-5) var(--space-4); text-align: center; background: var(--color-surface); border: 1px solid var(--card-border); border-radius: var(--radius-lg); box-shadow: var(--card-shadow); }
+.agent-chat__welcome p { margin: 0; color: var(--color-muted); font-size: var(--font-size-sm); }
+.agent-chat__welcome .agent-chat__welcome-title { color: var(--color-text); font-size: 1.0625rem; font-weight: 700; }
+.agent-chat__prompts-label { margin-top: var(--space-2) !important; font-size: var(--font-size-xs) !important; text-transform: uppercase; letter-spacing: .06em; }
+.agent-chat__prompts { margin-top: 0; }
+.chip-button { transition: border-color var(--transition-fast), background-color var(--transition-fast), color var(--transition-fast); }
+.chip-button:hover:not(:disabled) { color: var(--color-primary); background: rgb(var(--primary-rgb) / .08); }
+.agent-chat__composer { align-items: center; background: var(--color-surface); }
+.agent-chat__send { display: inline-flex; align-items: center; justify-content: center; gap: 6px; width: auto; min-width: 40px; height: 40px; padding: 0 14px; font: inherit; font-size: var(--font-size-sm); font-weight: 600; border: 0; cursor: pointer; transition: background-color var(--transition-fast), transform var(--transition-fast); }
+.agent-chat__send:hover:not(:disabled) { background: var(--color-primary-hover); }
+.agent-chat__send:active:not(:disabled) { transform: translateY(1px); }
+.agent-chat__send:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.agent-chat__send .icon { width: 18px; height: 18px; }
+.agent-chat__send--stop { color: var(--color-text); background: rgb(var(--error-rgb) / .14); border: 1px solid rgb(var(--error-rgb) / .45); }
+.agent-chat__send--stop:hover { background: rgb(var(--error-rgb) / .22) !important; }
+.assistant-launcher__label { position: absolute; right: calc(100% + 10px); top: 50%; padding: 4px 10px; color: var(--color-on-primary); font-size: var(--font-size-xs); font-weight: 600; white-space: nowrap; background: var(--color-primary); border-radius: 999px; box-shadow: 0 6px 16px -6px rgb(var(--primary-rgb) / .6); opacity: 0; transform: translate(6px, -50%); transition: opacity var(--transition-fast), transform var(--transition-fast); pointer-events: none; }
+.assistant-launcher:hover .assistant-launcher__label,
+.assistant-launcher:focus-visible .assistant-launcher__label { opacity: 1; transform: translate(0, -50%); }
+@media (max-width: 480px) {
+  .assistant-status__hint { display: none; }
+  .agent-chat__send span { display: none; }
+  .agent-chat__send { padding: 0; width: 40px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .assistant-status--processing .assistant-status__dot { animation: none; }
+}

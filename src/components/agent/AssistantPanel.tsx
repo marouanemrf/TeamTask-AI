@@ -140,6 +140,14 @@ function AssistantPanel({ id, role, onClose, onOrbState }: AssistantPanelProps) 
           ? "listening"
           : "idle";
   useEffect(() => onOrbState(orbState), [orbState, onOrbState]);
+  // What the status pill says: from the real state of the conversation and the deployment.
+  const status = !available
+    ? { tone: "offline", label: "Offline", hint: "Not deployed in this environment" }
+    : chat.busy
+      ? { tone: "processing", label: "Processing", hint: "Working on your question…" }
+      : last?.status === "error"
+        ? { tone: "error", label: "Needs attention", hint: "The last answer failed" }
+        : { tone: "available", label: "Available", hint: "Ready for your questions" };
   // A native modal dialog: above any other dialog (e.g. a task drawer), the rest of the page inert.
   useEffect(() => {
     const dialog = panelRef.current;
@@ -211,22 +219,29 @@ function AssistantPanel({ id, role, onClose, onOrbState }: AssistantPanelProps) 
         escape();
       }}>
       <header className="assistant-panel__header">
-        <AgentOrb3D state={orbState} size={40} />
+        <span className="assistant-panel__avatar">
+          <AgentOrb3D state={orbState} size={44} />
+        </span>
         <div className="assistant-panel__heading">
           <h2 id={`${uid}-title`}>TeamTask Assistant</h2>
-          <p className="assistant-panel__status" aria-live="polite">
-            {chat.busy ? "Thinking…" : available ? "Ready" : "Not deployed yet"}
+          <p className="assistant-panel__subtitle">AI help for your projects and tasks</p>
+          <p className={`assistant-status assistant-status--${status.tone}`} aria-live="polite">
+            <span className="assistant-status__dot" aria-hidden="true" />
+            <span className="assistant-status__label">{status.label}</span>
+            <span className="assistant-status__hint"> · {status.hint}</span>
           </p>
+        </div>
+        <div className="assistant-panel__tools">
+          <button type="button" className="icon-button" onClick={chat.reset} aria-label="New conversation" title="New conversation" disabled={!chat.messages.length}>
+            <RefreshIcon />
+          </button>
+          <button type="button" className="icon-button" onClick={onClose} aria-label="Close the assistant">
+            <CloseIcon />
+          </button>
         </div>
         <Link className="text-button assistant-panel__history" to={ROUTES.agentActivity} onClick={onClose}>
           Activity history
         </Link>
-        <button type="button" className="icon-button" onClick={chat.reset} aria-label="New conversation" title="New conversation" disabled={!chat.messages.length}>
-          <RefreshIcon />
-        </button>
-        <button type="button" className="icon-button" onClick={onClose} aria-label="Close the assistant">
-          <CloseIcon />
-        </button>
       </header>
 
       <div className="assistant-panel__access">
@@ -267,12 +282,15 @@ function AssistantPanel({ id, role, onClose, onOrbState }: AssistantPanelProps) 
 
       <div ref={logRef} className="assistant-panel__log" role="log" aria-live="polite" aria-relevant="additions text" tabIndex={0} aria-label="Conversation">
         {!available ? (
-          <div className="agent-chat__empty">
+          <div className="agent-chat__empty agent-chat__welcome">
+            <p className="agent-chat__welcome-title">Assistant offline</p>
             <p>The assistant isn't deployed in this environment yet.</p>
           </div>
         ) : chat.messages.length === 0 ? (
-          <div className="agent-chat__empty">
-            <p>Ask about your projects and tasks, or start with:</p>
+          <div className="agent-chat__empty agent-chat__welcome">
+            <p className="agent-chat__welcome-title">How can I help?</p>
+            <p>Ask about your projects and tasks. I answer from the data your role can see, and any change I prepare waits for your confirmation.</p>
+            <p className="agent-chat__prompts-label">Try asking</p>
             <div className="agent-chat__prompts">
               {SUGGESTED[role].map((q) => (
                 <button
@@ -331,12 +349,14 @@ function AssistantPanel({ id, role, onClose, onOrbState }: AssistantPanelProps) 
           disabled={!available}
         />
         {chat.busy ? (
-          <button type="button" className="icon-button agent-chat__send" onClick={chat.stop} aria-label="Stop the answer">
+          <button type="button" className="agent-chat__send agent-chat__send--stop" onClick={chat.stop} aria-label="Stop the answer">
             <StopIcon />
+            <span aria-hidden="true">Stop</span>
           </button>
         ) : (
-          <button type="submit" className="icon-button agent-chat__send" aria-label="Send" disabled={!available || !draft.trim()}>
+          <button type="submit" className="agent-chat__send" aria-label="Send" disabled={!available || !draft.trim()}>
             <SendIcon />
+            <span aria-hidden="true">Send</span>
           </button>
         )}
       </form>

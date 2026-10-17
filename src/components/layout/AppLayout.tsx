@@ -10,6 +10,7 @@ import MemberAvatar from "../team/MemberAvatar";
 import PresenceDot from "../team/PresenceDot";
 import { ChartIcon, ChatIcon, CloseIcon, DashboardIcon, FlagIcon, FolderIcon, MenuIcon, ProfileIcon, ShieldIcon, SignOutIcon, TasksIcon, TeamIcon } from "../ui/Icons";
 import ThemeToggle from "../ui/ThemeToggle";
+import BrandLogo from "../ui/BrandLogo";
 
 interface NavItem {
   to: string;
@@ -66,7 +67,7 @@ function AppLayout() {
       <aside id="app-sidebar" className={`sidebar${navOpen ? " sidebar--open" : ""}`} aria-label="Main navigation">
         <div className="sidebar__brand">
           <span className="sidebar__logo">
-            <ShieldIcon />
+            <BrandLogo />
           </span>
           <span>
             <span className="sidebar__name">Gogo Security</span>

@@ -13,6 +13,7 @@ import { dueBucket, isWithinLastDays, todayIsoDate } from "../utils/dates";
 import { PRIORITY_LABELS, TASK_PRIORITIES, TASK_STATUS_LABELS } from "../utils/projectLabels";
 import { blockReasonFor, canChangeStatus, checkStatusChange, completedAt, isOpenTask, isOverdue } from "../utils/taskRules";
 import LoadingState from "../components/ui/LoadingState";
+import { useToastMessage } from "../hooks/useToast";
 
 const FILTER_STATUSES: readonly TaskStatus[] = ["PROPOSED", "TODO", "IN_PROGRESS", "BLOCKED", "DONE"];
 const RECENT_DAYS = 7;
@@ -136,6 +137,10 @@ function MyTasksPage() {
 
   const selected = selectedId ? board.tasksById.get(selectedId) : undefined;
   const error = notice ?? actions.error;
+  useToastMessage(error && !blockerTask && !selected ? error : null, notice ? "warning" : "error", () => {
+    setNotice(null);
+    actions.clearError();
+  });
   const total = sections.overdue.length + sections.thisWeek.length + sections.later.length + sections.recentlyDone.length;
 
   if (board.loading) return <LoadingState className="empty-state panel">Loading your tasks…</LoadingState>;
@@ -186,21 +191,6 @@ function MyTasksPage() {
         </div>
       </div>
 
-      {error && !blockerTask && !selected && (
-        <div className="form-alert" role="alert">
-          <span>{error}</span>
-          <button
-            type="button"
-            className="button-secondary alert__action"
-            onClick={() => {
-              setNotice(null);
-              actions.clearError();
-            }}
-          >
-            Dismiss
-          </button>
-        </div>
-      )}
 
       {total === 0 ? (
         <p className="empty-state panel">No tasks match these filters.</p>

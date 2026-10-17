@@ -7,6 +7,7 @@ import type { WeeklyReport } from '../services/client';
 import { describeApiError } from '../utils/apiErrors';
 import { projectPath } from '../utils/routes';
 import LoadingState from "../components/ui/LoadingState";
+import { useToastMessage } from "../hooks/useToast";
 
 function ReportsPage() {
   const { id } = useParams();
@@ -14,6 +15,7 @@ function ReportsPage() {
   const { project, loading: projectLoading } = useProject(id);
   const [reports, setReports] = useState<WeeklyReport[]>([]);
   const [error, setError] = useState<string | null>(null);
+  useToastMessage(error, "error", () => setError(null));
   const [generating, setGenerating] = useState(false);
 
   useEffect(() => {
@@ -34,7 +36,7 @@ function ReportsPage() {
   return <div className="page-stack">
     <section className="panel">
       <div className="panel__header"><div><h2 className="panel__title">Weekly reports</h2><p>{project.name}</p></div>{isAdmin && <button className="button-primary" disabled={generating} onClick={() => void generate()}>{generating ? 'Generating…' : 'Generate now'}</button>}</div>
-      {error && <div className="form-alert" role="alert">{error}</div>}
+
       {reports.length === 0 ? <p className="empty-state">No reports yet.</p> : reports.map((report) => <article className="panel" key={report.id} style={{ marginTop: 16 }}>
         <h3>Week {report.weekNumber}{report.year ? ` · ${report.year}` : ''} {report.aiGenerated && <span className="chip chip--ai" title="Summary and suggested actions written by AI from the figures below">AI</span>}</h3>
         <div className="stat-grid"><div><strong>Total</strong><p>{report.totalCount ?? 0}</p></div><div><strong>Done</strong><p>{report.completedCount ?? 0}</p></div><div><strong>In progress</strong><p>{report.inProgressCount ?? 0}</p></div><div><strong>Overdue</strong><p>{report.overdueCount ?? 0}</p></div><div><strong>Completion</strong><p>{report.completionRate ?? 0}%</p></div></div>

@@ -1,5 +1,6 @@
 import { Component, lazy, Suspense, useCallback, useEffect, useState } from "react";
 import type { ReactNode } from "react";
+import BrandLogo from "../ui/BrandLogo";
 
 const LoginScene3D = lazy(() => import("./LoginScene3D"));
 
@@ -105,19 +106,9 @@ function useFontsReady(): boolean {
   return ready;
 }
 
+/** The official logo, sized like the former shield mark. */
 function BrandMark() {
-  return (
-    <svg className="login-brand__mark" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path
-        d="M12 2.5 19.5 5v6.2c0 4.6-3.1 8.4-7.5 10.3-4.4-1.9-7.5-5.7-7.5-10.3V5Z"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinejoin="round"
-      />
-      <path d="M9.5 11.5V10a2.5 2.5 0 0 1 5 0v1.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-      <rect x="8.5" y="11.5" width="7" height="5" rx="1" fill="currentColor" />
-    </svg>
-  );
+  return <BrandLogo className="login-brand__mark" />;
 }
 
 export interface LoginLayoutProps {

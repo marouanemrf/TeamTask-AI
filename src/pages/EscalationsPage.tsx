@@ -5,6 +5,7 @@ import { listOpenEscalations, resolveEscalation } from '../services/automationSe
 import type { EscalationView } from '../services/automationService';
 import { describeApiError } from '../utils/apiErrors';
 import LoadingState from "../components/ui/LoadingState";
+import { useToastMessage } from "../hooks/useToast";
 
 type Decision = 'REASSIGN' | 'EXTEND_DEADLINE' | 'ACCEPT_DELAY';
 const DECISION_LABELS: Record<Decision, string> = { REASSIGN: 'Reassign', EXTEND_DEADLINE: 'Extend the deadline', ACCEPT_DELAY: 'Accept the delay' };
@@ -14,6 +15,7 @@ function EscalationsPage() {
   const [items, setItems] = useState<EscalationView[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  useToastMessage(error, "error", () => setError(null));
   const [busy, setBusy] = useState<string | null>(null);
   const [decisions, setDecisions] = useState<Record<string, Decision>>({});
 
@@ -49,7 +51,7 @@ function EscalationsPage() {
   return <div className="page-stack">
     <section className="panel">
       <h2 className="panel__title">Open escalations</h2>
-      {error && <div className="form-alert" role="alert">{error}</div>}
+
       {loading ? <LoadingState>Loading escalations…</LoadingState> : items.length === 0 ? <p className="empty-state">No open escalations.</p> : items.map((item) => {
         const decision = decisions[item.escalation.id] ?? 'ACCEPT_DELAY';
         return <article key={item.escalation.id} className="panel" style={{ marginTop: 16 }}>

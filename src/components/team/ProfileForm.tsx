@@ -7,6 +7,7 @@ import { AVATAR_ACCEPT } from "../../utils/image";
 import MemberAvatar from "./MemberAvatar";
 import PresenceDot from "./PresenceDot";
 import SkillsInput from "./SkillsInput";
+import { useToastMessage } from "../../hooks/useToast";
 
 const PHONE_PATTERN = /^\+?[0-9 ()-]{7,20}$/;
 
@@ -43,6 +44,8 @@ function ProfileForm({ member, email, saving, uploading, error, ownStatus, onSta
   const [awayUntil, setAwayUntil] = useState(member.unavailableUntil ?? "");
   const [fieldErrors, setFieldErrors] = useState<{ name?: string; phone?: string; away?: string }>({});
   const [notice, setNotice] = useState<string | null>(null);
+  useToastMessage(notice, "success", () => setNotice(null));
+  useToastMessage(error, "error");
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -173,8 +176,6 @@ function ProfileForm({ member, email, saving, uploading, error, ownStatus, onSta
           {fieldErrors.away && <p id={`${id}-away-error`} className="form-field__error">{fieldErrors.away}</p>}
         </fieldset>
 
-        {error && <div className="form-alert" role="alert"><span>{error}</span></div>}
-        <div className="status-region" role="status">{notice && <p className="notice">{notice}</p>}</div>
 
         <div className="profile-actions">
           <div className="form-field">

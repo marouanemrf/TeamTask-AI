@@ -9,6 +9,7 @@ import type { PlannedTask, Recommendation } from "../../services/planningService
 import { PRIORITY_LABELS, TASK_PRIORITIES } from "../../utils/projectLabels";
 import { isOpenTask } from "../../utils/taskRules";
 import LoadingState from "../ui/LoadingState";
+import { useToastMessage } from "../../hooks/useToast";
 
 const STATUS: Record<NonNullable<Recommendation["status"]>, { label: string; badge: string }> = {
   GENERATING: { label: "Generating", badge: "badge--blue" },
@@ -39,6 +40,7 @@ interface Props {
 function AiPlanPanel({ project, members, allTasks, today, onShowBoard }: Props) {
   const id = useId();
   const planning = usePlanning(project.id);
+  useToastMessage(planning.error, "error", planning.clearError);
   const [scope, setScope] = useState(project.objective ?? "");
   const [scopeError, setScopeError] = useState<string | null>(null);
 
@@ -59,12 +61,6 @@ function AiPlanPanel({ project, members, allTasks, today, onShowBoard }: Props) 
 
   return (
     <div className="page-stack">
-      {planning.error && (
-        <div className="form-alert" role="alert">
-          <span>{planning.error}</span>
-          <button type="button" className="button-secondary alert__action" onClick={planning.clearError}>Dismiss</button>
-        </div>
-      )}
 
       {!active && (
         <form className="panel" onSubmit={(e) => void handleRequest(e)} noValidate>

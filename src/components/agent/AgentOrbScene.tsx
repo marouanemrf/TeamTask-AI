@@ -3,10 +3,16 @@ import { Canvas, useFrame } from "@react-three/fiber";
 import { AdditiveBlending, Color, MathUtils } from "three";
 import type { Group, Mesh, MeshStandardMaterial, Points } from "three";
 import type { AgentOrbState } from "./AgentOrb";
+import { useTheme } from "../../hooks/useTheme";
 
 const TEAL = new Color("#00E0B8");
 const BLUE = new Color("#3B82F6");
 const RED = new Color("#F05252");
+/** Dark mode keeps the original teal → blue orb; light mode uses the logo's cyan → royal blue. */
+const PALETTES = {
+  dark: { base: TEAL, mix: BLUE },
+  light: { base: new Color("#29B6E8"), mix: new Color("#035AD2") },
+} as const;
 const PARTICLES = 48;
 
 /** Per state: rotation speed, pulse speed/amount, particle orbit radius, colour mix towards blue. */
@@ -19,6 +25,8 @@ const MOTION: Record<AgentOrbState, { spin: number; pulse: number; amp: number; 
 };
 
 function Orb({ state, animate }: { state: AgentOrbState; animate: boolean }) {
+  const { theme } = useTheme();
+  const palette = PALETTES[theme];
   const core = useRef<Mesh>(null);
   const material = useRef<MeshStandardMaterial>(null);
   const cloud = useRef<Points>(null);
@@ -38,7 +46,7 @@ function Orb({ state, animate }: { state: AgentOrbState; animate: boolean }) {
     }
     if (material.current) {
       const flicker = state === "error" && animate ? (Math.sin(t * 30) > 0 ? 1 : 0.4) : 1;
-      const target = state === "error" ? RED : TEAL.clone().lerp(BLUE, m.blue + (state === "thinking" ? Math.sin(t * 2) * 0.2 : 0));
+      const target = state === "error" ? RED : palette.base.clone().lerp(palette.mix, m.blue + (state === "thinking" ? Math.sin(t * 2) * 0.2 : 0));
       material.current.color.lerp(target, Math.min(1, delta * 4));
       material.current.emissive.copy(material.current.color);
       material.current.emissiveIntensity = 0.55 * flicker;
@@ -64,20 +72,20 @@ function Orb({ state, animate }: { state: AgentOrbState; animate: boolean }) {
     <>
       <mesh ref={core}>
         <icosahedronGeometry args={[1, 1]} />
-        <meshStandardMaterial ref={material} color={TEAL} emissive={TEAL} emissiveIntensity={0.55} flatShading metalness={0.35} roughness={0.35} />
+        <meshStandardMaterial ref={material} color={palette.base} emissive={palette.base} emissiveIntensity={0.55} flatShading metalness={0.35} roughness={0.35} />
       </mesh>
       <points ref={cloud}>
         <bufferGeometry>
           <bufferAttribute attach="attributes-position" args={[positions, 3]} />
         </bufferGeometry>
-        <pointsMaterial size={0.09} color={TEAL} transparent opacity={0.9} blending={AdditiveBlending} depthWrite={false} />
+        <pointsMaterial size={0.09} color={palette.base} transparent opacity={0.9} blending={AdditiveBlending} depthWrite={false} />
       </points>
       {/* "Proposing": particles gather into small cubes, one per proposed change. */}
       <group ref={cubes} visible={false}>
         {[0, 1, 2, 3, 4, 5].map((i) => (
           <mesh key={i} position={[Math.cos((i / 6) * Math.PI * 2) * 1.5, (i % 2 ? 0.25 : -0.25), Math.sin((i / 6) * Math.PI * 2) * 1.5]}>
             <boxGeometry args={[0.22, 0.22, 0.22]} />
-            <meshStandardMaterial color={BLUE} emissive={BLUE} emissiveIntensity={0.6} />
+            <meshStandardMaterial color={palette.mix} emissive={palette.mix} emissiveIntensity={0.6} />
           </mesh>
         ))}
       </group>

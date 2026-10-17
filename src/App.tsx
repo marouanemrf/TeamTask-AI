@@ -6,6 +6,7 @@ import { UserProvider } from "./context/UserContext";
 import { PresenceProvider } from "./context/PresenceContext";
 import { useSignIn } from "./hooks/useSignIn";
 import { signOutUser } from "./services/authService";
+import { ToastProvider } from "./components/ui/Toaster";
 import PilotMetricsPage from "./pages/PilotMetricsPage";
 import AgentActivityPage from "./pages/AgentActivityPage";
 import DashboardPage from "./pages/DashboardPage";
@@ -37,6 +38,7 @@ function App() {
       <EmailVerificationGate onSignOut={() => void signOutUser()}>
       <UserProvider>
        <PresenceProvider>
+        <ToastProvider>
         <BrowserRouter>
           <Routes>
             <Route element={<AppLayout />}>
@@ -57,6 +59,7 @@ function App() {
             </Route>
           </Routes>
         </BrowserRouter>
+        </ToastProvider>
        </PresenceProvider>
       </UserProvider>
       </EmailVerificationGate>

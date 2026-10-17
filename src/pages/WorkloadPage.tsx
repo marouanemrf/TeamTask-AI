@@ -12,6 +12,7 @@ import { ROUTES } from "../utils/routes";
 import { isOpenTask, isOverdue, rankAssignees } from "../utils/taskRules";
 import { computeWorkload, summariseWorkload } from "../utils/workload";
 import LoadingState from "../components/ui/LoadingState";
+import { useToastMessage } from "../hooks/useToast";
 
 /** Team workload (managers): load per member, overdue counts, and reassignment of overdue / overloaded work. */
 function WorkloadPage() {
@@ -25,6 +26,8 @@ function WorkloadPage() {
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
   const [reassigningId, setReassigningId] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
+  useToastMessage(done, "success", () => setDone(null));
+  useToastMessage(actions.error, "error");
 
   const today = todayIsoDate();
   const projectNames = useMemo(() => new Map(projects.map((p) => [p.id, p.name])), [projects]);
@@ -131,14 +134,6 @@ function WorkloadPage() {
         </div>
       </div>
 
-      <div className="status-region" role="status" aria-live="polite">
-        {done && <p className="notice">{done}</p>}
-      </div>
-      {actions.error && (
-        <div className="form-alert" role="alert">
-          <span>{actions.error}</span>
-        </div>
-      )}
 
       {loading ? (
         <LoadingState className="empty-state panel">Loading team workload…</LoadingState>

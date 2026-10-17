@@ -22,6 +22,7 @@ import { TASK_STATUS_LABELS } from "../utils/projectLabels";
 import { projectReportsPath, ROUTES } from "../utils/routes";
 import { canChangeStatus, checkStatusChange, projectProgress } from "../utils/taskRules";
 import LoadingState from "../components/ui/LoadingState";
+import { useToastMessage } from "../hooks/useToast";
 
 const TABS = [
   { id: "kanban", label: "Kanban board" },
@@ -113,6 +114,12 @@ function ProjectDetailPage() {
     document.getElementById(`tab-${visibleTabs[nextIndex].id}`)?.focus();
   }
 
+  // Action errors and rule explanations: notification (the drawer and the form show their own).
+  useToastMessage(actionError && !selected && !form ? actionError : null, notice ? "warning" : "error", () => {
+    setNotice(null);
+    taskActions.clearError();
+  });
+
   if (loading) return <LoadingState className="empty-state panel">Loading project…</LoadingState>;
 
   if (!project) {
@@ -176,21 +183,6 @@ function ProjectDetailPage() {
         )}
       </div>
 
-      {actionError && !selected && !form && (
-        <div className="form-alert" role="alert">
-          <span>{actionError}</span>
-          <button
-            type="button"
-            className="button-secondary alert__action"
-            onClick={() => {
-              setNotice(null);
-              taskActions.clearError();
-            }}
-          >
-            Dismiss
-          </button>
-        </div>
-      )}
 
       <div id={`panel-${tab}`} role="tabpanel" aria-labelledby={`tab-${tab}`} tabIndex={0} className="tab-panel">
         {tab === "ai-plan" ? (
