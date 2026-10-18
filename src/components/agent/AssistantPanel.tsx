@@ -69,15 +69,7 @@ function AssistantBubble({ message, onRetry, onConfirm, onCancel }: {
   const steps = execution?.steps.length ?? 0;
   return (
     <div className="chat-message chat-message--assistant">
-      {execution && (
-        <details className="chat-trace">
-          <summary>
-            View agent activity ({steps === 0 ? (streaming ? "starting" : "no tool used") : `${steps} step${steps === 1 ? "" : "s"}`}
-            {streaming ? ", running" : ""})
-          </summary>
-          <ExecutionDetails execution={execution} live />
-        </details>
-      )}
+      
       {message.text ? (
         <p className="chat-message__text">{message.text}</p>
       ) : streaming ? (

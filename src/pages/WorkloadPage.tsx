@@ -17,7 +17,7 @@ import { useToastMessage } from "../hooks/useToast";
 /** Team workload (managers): load per member, overdue counts, and reassignment of overdue / overloaded work. */
 function WorkloadPage() {
   const id = useId();
-  const { isManager } = useUser();
+  const { isManager, organisationStatus } = useUser();
   const { members, loading: membersLoading } = useTeamMembers();
   const board = useAllTasksBoard();
   const actions = useTaskActions(board.patch);
@@ -84,6 +84,7 @@ function WorkloadPage() {
     });
   }
 
+  if (organisationStatus === "loading") return <LoadingState className="empty-state panel" />;
   if (!isManager) {
     return (
       <div className="panel">

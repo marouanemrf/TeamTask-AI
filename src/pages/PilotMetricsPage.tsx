@@ -16,7 +16,8 @@ const PERIODS = [
   { days: 3650, label: "Since the start" },
 ] as const;
 
-const show = (value: number | null, suffix = "%") => (value === null ? "—" : `${value}${suffix}`);
+/** "No data" when there is nothing to measure yet ("—" is the loading placeholder of StatCard). */
+const show = (value: number | null, suffix = "%") => (value === null ? "No data" : `${value}${suffix}`);
 
 /**
  * Pilot measures from the proposal (§7 step 8): assignment quality, reminder effectiveness, overdue
@@ -25,7 +26,7 @@ const show = (value: number | null, suffix = "%") => (value === null ? "—" : `
  */
 function PilotMetricsPage() {
   const id = useId();
-  const { isManager } = useUser();
+  const { isManager, organisationStatus } = useUser();
   const { tasks, loading: tasksLoading } = useTasks();
   const { members } = useTeamMembers();
   const [records, setRecords] = useState<PilotRecords | null>(null);
@@ -52,6 +53,7 @@ function PilotMetricsPage() {
     return computePilotMetrics({ ...records, tasks, today, since, minutesPerTask, minutesPerReport });
   }, [records, tasks, today, days, minutesPerTask, minutesPerReport]);
 
+  if (organisationStatus === "loading") return <LoadingState className="empty-state panel">Loading pilot metrics…</LoadingState>;
   if (!isManager) return <p className="empty-state panel">Pilot metrics are available to administrators and project managers.</p>;
   if (error) return <div className="form-alert" role="alert"><span>{error}</span></div>;
   if (!metrics || tasksLoading) return <LoadingState className="empty-state panel">Loading pilot metrics…</LoadingState>;
@@ -88,7 +90,7 @@ function PilotMetricsPage() {
           <StatCard label="Reminders sent" value={String(metrics.reminders.sent)} hint={metrics.reminders.failed ? `${metrics.reminders.failed} failed to send` : undefined} tone={metrics.reminders.failed ? "alert" : "default"} />
           <StatCard label="Followed by progress" value={show(metrics.reminders.followedByProgress)} hint="Status changed within 48 h of the reminder" />
           <StatCard label="Overdue tasks" value={String(metrics.overdue.overdue)} hint={`${show(metrics.overdue.overduePercent)} of ${metrics.overdue.open} open tasks`} tone={metrics.overdue.overdue ? "alert" : "default"} />
-          <StatCard label="Overdue trend" value={metrics.overdue.trend.length ? metrics.overdue.trend.map((t) => t.overdue).join(" → ") : "—"} hint={metrics.overdue.trend.length ? `Weekly reports ${metrics.overdue.trend[0].week} to ${metrics.overdue.trend[metrics.overdue.trend.length - 1].week}` : "No weekly reports yet"} />
+          <StatCard label="Overdue trend" value={metrics.overdue.trend.length ? metrics.overdue.trend.map((t) => t.overdue).join(" → ") : "No data"} hint={metrics.overdue.trend.length ? `Weekly reports ${metrics.overdue.trend[0].week} to ${metrics.overdue.trend[metrics.overdue.trend.length - 1].week}` : "No weekly reports yet"} />
         </div>
       </section>
 
