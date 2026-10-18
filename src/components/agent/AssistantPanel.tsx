@@ -13,7 +13,6 @@ import { ROUTES } from "../../utils/routes";
 import { CloseIcon, RefreshIcon, SendIcon, StopIcon } from "../ui/Icons";
 import type { AgentOrbState } from "./AgentOrb";
 import AgentOrb3D from "./AgentOrb3D";
-import ExecutionDetails from "./ExecutionDetails";
 
 const MANAGER_QUESTIONS = ["What are the risks on this project?", "Who is overloaded?", "Plan this project"];
 const SUGGESTED: Record<AssistantRole, readonly string[]> = {
@@ -65,11 +64,8 @@ function AssistantBubble({ message, onRetry, onConfirm, onCancel }: {
   onCancel: (entry: CardEntry) => void;
 }) {
   const streaming = message.status === "streaming";
-  const execution = message.execution;
-  const steps = execution?.steps.length ?? 0;
   return (
     <div className="chat-message chat-message--assistant">
-      
       {message.text ? (
         <p className="chat-message__text">{message.text}</p>
       ) : streaming ? (
