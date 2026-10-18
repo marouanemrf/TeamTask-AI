@@ -3,15 +3,20 @@ import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, GetCommand, ScanCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import type { ScanCommandInput } from "@aws-sdk/lib-dynamodb";
 import { identityFromClaims } from "../assistant-chat/chatCore";
+import { organisationOf } from "../shared/assistantIdentity";
 import { isProfileTooThin, parseSuggestions, profilePrompt, SYSTEM_PROMPT } from "./careerCore";
 import type { CareerProfile } from "./careerCore";
 
 /**
- * POST /profile/career-suggestions — AI career suggestions from the caller's OWN profile.
- * Identity from the Cognito authorizer; the profile is read on the server (nothing from the body);
- * Bedrock (Converse) with the assistant's guardrail; output checked by code; 20 calls/user/hour.
+ * POST /profile/career-suggestions — AI career suggestions from a member's profile.
+ * Body { memberId? }: without it (or with the caller's own id), the caller's own profile; another
+ * member's profile only for ADMIN and PROJECT_MANAGER, and only in their own organisation.
+ * Identity from the Cognito authorizer; the profile is read on the server; Bedrock (Converse) with
+ * the assistant's guardrail; output checked by code; 20 calls/user/hour.
  */
 interface ApiEvent {
+  body?: string | null;
+  isBase64Encoded?: boolean;
   headers?: Record<string, string | undefined>;
   requestContext?: { authorizer?: { claims?: Record<string, unknown> } };
 }
@@ -62,8 +67,23 @@ export const handler = async (event: ApiEvent) => {
     return respond(event, 429, { error: { code: "RATE_LIMITED", message: "Too many requests. Try again later." } });
   }
 
-  // The caller's own profile and the projects they work on (server-side, by the token's email).
-  const [member] = await scan<Record<string, unknown>>({ TableName: process.env.TABLE_TEAMMEMBER!, FilterExpression: "email = :e", ExpressionAttributeValues: { ":e": identity.email } });
+  // The profile: the caller's own (by the token's email), or a member of the caller's organisation
+  // for managers. A member of another organisation is reported as not found.
+  let memberId: unknown;
+  try {
+    const raw = event.isBase64Encoded && event.body ? Buffer.from(event.body, "base64").toString("utf8") : event.body;
+    memberId = raw ? (JSON.parse(raw) as { memberId?: unknown }).memberId : undefined;
+  } catch {
+    return respond(event, 400, { error: { code: "VALIDATION", message: "The body must be JSON." } });
+  }
+  const [own] = await scan<Record<string, unknown>>({ TableName: process.env.TABLE_TEAMMEMBER!, FilterExpression: "email = :e", ExpressionAttributeValues: { ":e": identity.email } });
+  let member: Record<string, unknown> | undefined = own;
+  if (typeof memberId === "string" && memberId && memberId !== own?.id) {
+    if (identity.role !== "ADMIN" && identity.role !== "PROJECT_MANAGER") return respond(event, 403, { error: { code: "FORBIDDEN", message: "Only administrators and project managers can see another member's suggestions." } });
+    const orgId = await organisationOf(identity);
+    member = (await db.send(new GetCommand({ TableName: process.env.TABLE_TEAMMEMBER!, Key: { id: memberId } }))).Item;
+    if (!member || !orgId || member.organisationId !== orgId) return respond(event, 404, { error: { code: "NOT_FOUND", message: "This member doesn't exist." } });
+  }
   if (!member) return respond(event, 404, { error: { code: "NO_PROFILE", message: "Create your team profile first." } });
   const tasks = await scan<{ projectId: string }>({ TableName: process.env.TABLE_TASK!, FilterExpression: "assigneeId = :a", ExpressionAttributeValues: { ":a": member.id }, ProjectionExpression: "projectId" });
   const projectIds = [...new Set(tasks.map((t) => t.projectId))].slice(0, 20);

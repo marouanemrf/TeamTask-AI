@@ -18,8 +18,11 @@ export interface CareerSuggestionsResult {
   suggestions?: CareerSuggestion[];
 }
 
-/** AI career suggestions from the signed-in user's own profile (read on the server). */
-export async function fetchCareerSuggestions(signal?: AbortSignal): Promise<CareerSuggestionsResult> {
-  const response = await authorizedFetch("/profile/career-suggestions", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}", signal });
+/**
+ * AI career suggestions from a member's profile (read on the server): the user's own, or, for
+ * administrators and project managers, another member of their organisation.
+ */
+export async function fetchCareerSuggestions(memberId: string, signal?: AbortSignal): Promise<CareerSuggestionsResult> {
+  const response = await authorizedFetch("/profile/career-suggestions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ memberId }), signal });
   return (await response.json()) as CareerSuggestionsResult;
 }

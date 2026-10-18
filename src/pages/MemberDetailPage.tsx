@@ -1,10 +1,12 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
+import CvBuilder from "../components/team/CvBuilder";
 import MemberAvatar from "../components/team/MemberAvatar";
 import MemberFormModal from "../components/team/MemberFormModal";
 import SkillChips from "../components/team/SkillChips";
 import WorkloadBar from "../components/team/WorkloadBar";
 import PresenceDot from "../components/team/PresenceDot";
+import { useCareerSuggestions } from "../hooks/useCareerSuggestions";
 import { useProjects } from "../hooks/useProjects";
 import { useTasks } from "../hooks/useTasks";
 import { useMemberActions, useTeamMembers } from "../hooks/useTeam";
@@ -14,6 +16,8 @@ import type { Task } from "../services/client";
 import type { AvatarChange, MemberInput } from "../services/teamService";
 import { formatDate, todayIsoDate } from "../utils/dates";
 import { TASK_STATUS_LABELS, TASK_STATUS_ORDER } from "../utils/projectLabels";
+import { canUseAssistant } from "../utils/roles";
+import type { Role } from "../utils/roles";
 import { ROUTES, projectPath } from "../utils/routes";
 import { isOpenTask, isOverdue } from "../utils/taskStats";
 import { computeWorkload } from "../utils/workload";
@@ -22,7 +26,7 @@ import LoadingState from "../components/ui/LoadingState";
 function MemberDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { isAdmin, email: myEmail } = useUser();
+  const { isAdmin, isManager, email: myEmail } = useUser();
   const { members, loading } = useTeamMembers();
   const { tasks, loading: tasksLoading } = useTasks();
   const { projects } = useProjects();
@@ -38,6 +42,15 @@ function MemberDetailPage() {
   const openTasks = memberTasks.filter(isOpenTask);
   const workload = computeWorkload(memberTasks, member?.weeklyCapacityHours);
   const projectNames = useMemo(() => new Map(projects.map((p) => [p.id, p.name])), [projects]);
+  // Projects the member works on (has tasks in), for the CV.
+  const memberProjects = useMemo(() => {
+    const ids = new Set(memberTasks.map((t) => t.projectId));
+    return projects.filter((p) => ids.has(p.id));
+  }, [memberTasks, projects]);
+  // Managers see the member's CV and AI career ideas; CVs start at Member (not for viewers).
+  const memberRoles = (member?.roles?.length ? member.roles : [member?.role ?? "VIEWER"]).filter((r): r is Role => !!r);
+  const showCv = isManager && !!member && canUseAssistant(memberRoles);
+  const career = useCareerSuggestions(showCv ? member : undefined);
 
   // Tasks grouped by status, active work first; each group sorted by due date.
   const groups = useMemo(() => {
@@ -215,6 +228,10 @@ function MemberDetailPage() {
           )}
         </section>
       </div>
+
+      {showCv && member && (
+        <CvBuilder member={member} email={member.email} projects={memberProjects} career={career.state} onRefreshCareer={career.refresh} ownProfile={false} />
+      )}
 
       <p>
         <Link className="text-link" to={ROUTES.team}>

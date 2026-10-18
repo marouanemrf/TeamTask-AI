@@ -11,6 +11,8 @@ export interface CvBuilderProps {
   /** AI career suggestions from the same profile (shown in the CV document, not printed). */
   career: CareerState;
   onRefreshCareer: () => void;
+  /** False when a manager views a member's CV (wording, export label). */
+  ownProfile?: boolean;
 }
 
 /**
@@ -18,7 +20,7 @@ export interface CvBuilderProps {
  * images. Nothing is typed here — the content always follows the profile. The CV paper also carries
  * the AI career suggestions (not exported). Export uses the browser's "Save as PDF".
  */
-function CvBuilder({ member, email, projects, career, onRefreshCareer }: CvBuilderProps) {
+function CvBuilder({ member, email, projects, career, onRefreshCareer, ownProfile = true }: CvBuilderProps) {
   const id = useId();
   const skills = (member.skills ?? []).filter((s): s is string => !!s);
   const headline = member.jobTitle || "";
@@ -30,10 +32,11 @@ function CvBuilder({ member, email, projects, career, onRefreshCareer }: CvBuild
   return (
     <>
       <section className="panel" aria-labelledby={`${id}-title`}>
-        <h2 id={`${id}-title`} className="panel__title">CV builder</h2>
+        <h2 id={`${id}-title`} className="panel__title">{ownProfile ? "CV builder" : `CV of ${member.name}`}</h2>
         <p className="form-hint">
-          Generated automatically from your saved profile — update the profile above to change it, then export it with
-          your browser's “Save as PDF”.
+          {ownProfile
+            ? "Generated automatically from your saved profile — update the profile above to change it, then export it with your browser's “Save as PDF”."
+            : "Generated automatically from the member's saved profile and the projects they work on. Export it with your browser's “Save as PDF”."}
         </p>
         <div className="cv-builder__actions">
           <button type="button" className="button-primary" onClick={() => window.print()}>
@@ -42,7 +45,7 @@ function CvBuilder({ member, email, projects, career, onRefreshCareer }: CvBuild
         </div>
       </section>
 
-      <section className="cv-document" aria-label="My CV">
+      <section className="cv-document" aria-label={ownProfile ? "My CV" : `CV of ${member.name}`}>
         <article className="cv-preview" aria-label="CV preview">
           <header>
             <h1>{member.name}</h1>
@@ -80,11 +83,11 @@ function CvBuilder({ member, email, projects, career, onRefreshCareer }: CvBuild
             </section>
           )}
           {!summary && !skills.length && !experience.length && !education.length && (
-            <p className="cv-preview__empty">Add a summary, skills, experience or education to your profile to fill this CV.</p>
+            <p className="cv-preview__empty">{ownProfile ? "Add a summary, skills, experience or education to your profile to fill this CV." : "This member's profile has no summary, skills, experience or education yet."}</p>
           )}
           {/* Part of the CV document on screen, left out of the exported PDF. */}
           <aside className="cv-preview__suggestions">
-            <CareerSuggestions state={career} onRefresh={onRefreshCareer} />
+            <CareerSuggestions state={career} onRefresh={onRefreshCareer} ownProfile={ownProfile} />
           </aside>
         </article>
       </section>

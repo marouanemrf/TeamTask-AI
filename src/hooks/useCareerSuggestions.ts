@@ -24,21 +24,23 @@ function readCache(key: string): CareerSuggestionsResult | null {
 }
 
 /**
- * AI career suggestions for the user's own profile. Fetched again whenever the saved profile
- * changes (its updatedAt), and kept for the browser session so a page reload doesn't call the
- * model again for the same profile. "Generate again" bypasses that cache.
+ * AI career suggestions for a member's profile (the user's own, or another member's for managers).
+ * Fetched again whenever the saved profile changes (its updatedAt), and kept for the browser
+ * session so a page reload doesn't call the model again for the same profile. "Generate again"
+ * bypasses that cache.
  */
 export function useCareerSuggestions(member: Pick<TeamMember, "id" | "updatedAt"> | undefined) {
   const key = member ? cacheKey(member) : null;
+  const memberId = member?.id ?? null;
   const [version, setVersion] = useState(0);
   const [fetched, setFetched] = useState<{ key: string; version: number; state: CareerState } | null>(null);
   const cached = useMemo(() => (key && version === 0 ? readCache(key) : null), [key, version]);
 
   useEffect(() => {
-    if (!key || cached) return;
+    if (!key || !memberId || cached) return;
     let cancelled = false;
     const controller = new AbortController();
-    fetchCareerSuggestions(controller.signal)
+    fetchCareerSuggestions(memberId, controller.signal)
       .then((result) => {
         if (cancelled) return;
         setFetched({ key, version, state: { kind: "ready", result } });
@@ -57,7 +59,7 @@ export function useCareerSuggestions(member: Pick<TeamMember, "id" | "updatedAt"
       cancelled = true;
       controller.abort();
     };
-  }, [key, version, cached]);
+  }, [key, memberId, version, cached]);
 
   const state: CareerState = cached
     ? { kind: "ready", result: cached }
