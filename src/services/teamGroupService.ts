@@ -14,8 +14,10 @@ export function observeTeams(organisationId: string, onChange: (teams: TeamGroup
     onChange([]);
     return () => undefined;
   }
-  const sub = client.models.Team.observeQuery({ filter: { organisationId: { eq: organisationId } } }).subscribe({
-    next: ({ items }) => onChange([...items].sort((a, b) => a.name.localeCompare(b.name))),
+  // No organisationId filter: the data API already scopes the teams to the caller's organisation,
+  // and that field (the isolation group) can't be used in subscription filters.
+  const sub = client.models.Team.observeQuery().subscribe({
+    next: ({ items }) => onChange(items.filter((t) => t.organisationId === organisationId).sort((a, b) => a.name.localeCompare(b.name))),
     error: onError,
   });
   return () => sub.unsubscribe();

@@ -62,16 +62,18 @@ export async function getAvatarUrl(path: string): Promise<{ url: string; expires
 /* Reads                                                                       */
 /* -------------------------------------------------------------------------- */
 
-/** Live list of the organisation's members. Returns an unsubscribe function. */
+/**
+ * Live list of the organisation's members. Returns an unsubscribe function.
+ * No organisationId filter in the query: the data API already returns only the caller's
+ * organisation, and that field (the isolation group) can't be used in subscription filters.
+ */
 export function observeTeamMembers(
   organisationId: string,
   onChange: (members: TeamMember[]) => void,
   onError: (err: unknown) => void,
 ): () => void {
-  const subscription = client.models.TeamMember.observeQuery({
-    filter: { organisationId: { eq: organisationId } },
-  }).subscribe({
-    next: ({ items }) => onChange([...items]),
+  const subscription = client.models.TeamMember.observeQuery().subscribe({
+    next: ({ items }) => onChange(items.filter((m) => m.organisationId === organisationId)),
     error: onError,
   });
   return () => subscription.unsubscribe();
