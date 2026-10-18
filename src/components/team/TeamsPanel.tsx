@@ -3,11 +3,13 @@ import type { FormEvent } from "react";
 import type { TeamMember } from "../../services/client";
 import type { TeamGroup } from "../../services/teamGroupService";
 import { useToastMessage } from "../../hooks/useToast";
+import LoadingState from "../ui/LoadingState";
 
 interface Props {
   teams: readonly TeamGroup[];
   members: readonly TeamMember[];
   canManage: boolean;
+  loading: boolean;
   busy: boolean;
   error: string | null;
   onCreate: (input: { name: string; description?: string; leadMemberId?: string | null }) => Promise<boolean>;
@@ -15,7 +17,7 @@ interface Props {
 }
 
 /** Teams of the organisation: name, lead, members. Managers add teams and delete empty ones. */
-function TeamsPanel({ teams, members, canManage, busy, error, onCreate, onDelete }: Props) {
+function TeamsPanel({ teams, members, canManage, loading, busy, error, onCreate, onDelete }: Props) {
   const id = useId();
   useToastMessage(error, "error");
   const [name, setName] = useState("");
@@ -41,7 +43,11 @@ function TeamsPanel({ teams, members, canManage, busy, error, onCreate, onDelete
   return (
     <section className="panel" aria-labelledby={`${id}-title`}>
       <h2 id={`${id}-title`} className="panel__title">Teams</h2>
-      {teams.length === 0 ? (
+      {loading ? (
+        <LoadingState>Loading teams…</LoadingState>
+      ) : error && teams.length === 0 ? (
+        <div className="form-alert" role="alert"><span>The teams couldn't be loaded. Refresh the page to try again.</span></div>
+      ) : teams.length === 0 ? (
         <p className="text-muted">No teams yet.{canManage ? " Create one below, then choose it in each member's account." : ""}</p>
       ) : (
         <div className="table-wrapper">

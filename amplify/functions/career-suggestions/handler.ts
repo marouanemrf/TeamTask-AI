@@ -45,6 +45,8 @@ export const handler = async (event: ApiEvent) => {
   const identity = identityFromClaims(event.requestContext?.authorizer?.claims);
   if (!identity) return respond(event, 401, { error: { code: "UNAUTHORIZED", message: "Sign in again." } });
   if (!identity.emailVerified) return respond(event, 403, { error: { code: "EMAIL_NOT_VERIFIED", message: "Verify your email address first." } });
+  // CV and career ideas start at Member (use case diagram): viewers only read.
+  if (identity.role === "VIEWER") return respond(event, 403, { error: { code: "FORBIDDEN", message: "Career suggestions are available to members, project managers and administrators." } });
 
   // Rate limit (own counter, separate from the assistant's).
   const now = new Date();

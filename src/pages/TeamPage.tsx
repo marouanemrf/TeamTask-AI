@@ -134,7 +134,7 @@ function TeamPage() {
       )}
 
       {!loading && !error && teamGroups.available && (
-        <TeamsPanel teams={teamGroups.teams} members={members} canManage={isAdmin} busy={teamGroups.busy} error={teamGroups.error} onCreate={teamGroups.create} onDelete={teamGroups.remove} />
+        <TeamsPanel teams={teamGroups.teams} members={members} canManage={isAdmin} loading={teamGroups.loading} busy={teamGroups.busy} error={teamGroups.error} onCreate={teamGroups.create} onDelete={teamGroups.remove} />
       )}
 
       {modalOpen && (

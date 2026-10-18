@@ -26,7 +26,7 @@ export function isManager(roles: readonly Role[]): boolean {
   return roles.some((role) => MANAGER_ROLES.includes(role));
 }
 
-/** Use case "Use the AI assistant" starts at Member: viewers only read (the server refuses them too). */
+/** Use cases "Use the AI assistant" and the CV / career ideas start at Member: viewers only read (the server refuses them too). */
 export function canUseAssistant(roles: readonly Role[]): boolean {
   return roles.some((role) => role !== "VIEWER");
 }

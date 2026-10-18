@@ -4,7 +4,7 @@ import type { TeamGroup } from "../services/teamGroupService";
 import { describeApiError } from "../utils/apiErrors";
 import { useUser } from "./useUser";
 
-/** Live teams of the current organisation, with create / delete for managers. */
+/** Live teams of the current organisation, with create / delete for administrators. */
 export function useTeamGroups() {
   const { organisationId } = useUser();
   const [teams, setTeams] = useState<{ org: string; items: TeamGroup[] } | null>(null);
@@ -41,6 +41,8 @@ export function useTeamGroups() {
     /** The backend supports teams (hide the Teams panel otherwise). */
     available: teamsAvailable(),
     teams: teams && teams.org === organisationId ? teams.items : [],
+    /** True until the first snapshot of this organisation's teams arrives (and no error). */
+    loading: !error && !(teams && teams.org === organisationId),
     busy,
     error,
     create: (input: { name: string; description?: string; leadMemberId?: string | null }) => (organisationId ? run(() => createTeam(input)) : Promise.resolve(false)),

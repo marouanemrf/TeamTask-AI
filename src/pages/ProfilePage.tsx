@@ -8,15 +8,18 @@ import { useTasks } from "../hooks/useTasks";
 import { useUser } from "../hooks/useUser";
 import type { TeamMember } from "../services/client";
 import { useCareerSuggestions } from "../hooks/useCareerSuggestions";
+import { canUseAssistant } from "../utils/roles";
 import LoadingState from "../components/ui/LoadingState";
 
-/** Self-service profile: edit the professional profile; the CV section includes the career suggestions. */
+/** Self-service profile: edit the professional profile; the CV section (with the career suggestions) from Member up. */
 export default function ProfilePage() {
   const profile = useMyProfile();
   const { projects } = useProjects();
   const { tasks } = useTasks();
   const { ownStatus, setOwnStatus } = usePresence();
-  const { isAdmin } = useUser();
+  const { isAdmin, roles } = useUser();
+  // CV and AI career ideas start at Member: a viewer only reads (use case diagram).
+  const withCv = canUseAssistant(roles);
   const { member } = profile;
 
   // Projects the member has tasks in.
@@ -27,7 +30,7 @@ export default function ProfilePage() {
   }, [member, tasks, projects]);
 
   // AI suggestions from the saved profile; refreshed whenever the profile is saved (updatedAt).
-  const career = useCareerSuggestions(member);
+  const career = useCareerSuggestions(withCv ? member : undefined);
 
   if (profile.loading) return <LoadingState className="empty-state panel">Loading your profile…</LoadingState>;
   if (!member) {
@@ -72,7 +75,7 @@ export default function ProfilePage() {
         onSave={profile.save}
         canEditJobTitle={isAdmin}
       />
-      <CvBuilder member={member} email={profile.email} projects={relatedProjects} career={career.state} onRefreshCareer={career.refresh} />
+      {withCv && <CvBuilder member={member} email={profile.email} projects={relatedProjects} career={career.state} onRefreshCareer={career.refresh} />}
     </div>
   );
 }
