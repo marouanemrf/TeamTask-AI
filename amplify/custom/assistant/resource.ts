@@ -28,7 +28,7 @@ export const DEFAULT_ASSISTANT_MODEL = 'eu.anthropic.claude-haiku-4-5-20251001-v
 export interface AssistantProps {
   toolsFunction: IFunction;
   chatFunction: IFunction;
-  /** POST /profile/career-suggestions (Bedrock Converse on the caller's own profile). */
+  /** POST /profile/career-suggestions (Bedrock Converse on the caller's profile, or a member's for managers). */
   careerFunction: IFunction;
   /** GET /assistant/executions (recorded executions: own, or the organisation's for ADMIN). */
   activityFunction: IFunction;
@@ -232,7 +232,8 @@ export function defineAssistant(props: AssistantProps) {
     conditions: { 'ForAllValues:StringLike': { 'dynamodb:LeadingKeys': ['RATE#career#*'] } },
   }));
   for (const name of ['TeamMember', 'Task']) props.careerFunction.addToRolePolicy(new PolicyStatement({ actions: ['dynamodb:Scan'], resources: [props.tables[name].tableArn] }));
-  props.careerFunction.addToRolePolicy(new PolicyStatement({ actions: ['dynamodb:GetItem'], resources: [props.tables.Project.tableArn] }));
+  // GetItem on TeamMember: a manager asking for a member's suggestions (by member id).
+  props.careerFunction.addToRolePolicy(new PolicyStatement({ actions: ['dynamodb:GetItem'], resources: [props.tables.Project.tableArn, props.tables.TeamMember.tableArn] }));
   props.careerFunction.addToRolePolicy(new PolicyStatement({
     actions: ['bedrock:InvokeModel', 'bedrock:GetInferenceProfile'],
     resources: modelResources,
