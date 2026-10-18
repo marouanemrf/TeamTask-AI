@@ -63,7 +63,7 @@ export function useMyTeamMemberIds() {
 
 /** Create / update / delete members (managers only — the API enforces it too). Errors are user-facing. */
 export function useMemberActions() {
-  const { email, organisationId } = useUser();
+  const { organisationId } = useUser();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -87,21 +87,21 @@ export function useMemberActions() {
         setError("No organisation is set up yet. Contact your administrator.");
         return Promise.resolve(null);
       }
-      return run(() => createTeamMember(organisationId, input, { email }, avatar));
+      return run(() => createTeamMember(organisationId, input, avatar));
     },
-    [organisationId, email, run],
+    [organisationId, run],
   );
 
   const update = useCallback(
     (member: TeamMember, input: MemberInput, avatar: AvatarChange) =>
-      run(() => updateTeamMember(member, input, { email }, avatar)),
-    [email, run],
+      run(() => updateTeamMember(member, input, avatar)),
+    [run],
   );
 
   /** Resolves to true when deleted. */
   const remove = useCallback(
-    async (member: TeamMember) => (await run(() => deleteTeamMember(member, { email }).then(() => true))) ?? false,
-    [email, run],
+    async (member: TeamMember) => (await run(() => deleteTeamMember(member).then(() => true))) ?? false,
+    [run],
   );
 
   const clearError = useCallback(() => setError(null), []);

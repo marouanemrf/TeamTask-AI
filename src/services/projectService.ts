@@ -1,8 +1,6 @@
 import { ApiError } from "./apiError";
-import { logEvent } from "./auditService";
 import { client } from "./client";
 import type { Project, ProjectStatus } from "./client";
-import type { AuditActor } from "./teamService";
 
 export interface NewProjectInput {
   organisationId: string;
@@ -33,10 +31,12 @@ export async function getProject(id: string): Promise<Project | null> {
   return data;
 }
 
-/** Creates a project, then records a CREATED event in the audit log. Throws ApiError if refused. */
-export async function createProject(input: NewProjectInput, actor: AuditActor): Promise<Project> {
-  const { data, errors } = await client.models.Project.create({
-    organisationId: input.organisationId,
+/**
+ * Creates a project in the caller's organisation (the server takes it from the session and records
+ * the CREATED audit event). Throws ApiError if refused.
+ */
+export async function createProject(input: NewProjectInput): Promise<Project> {
+  const { data, errors } = await client.mutations.saveProject({
     name: input.name,
     clientName: input.clientName || undefined,
     objective: input.objective || undefined,
@@ -49,8 +49,6 @@ export async function createProject(input: NewProjectInput, actor: AuditActor): 
     urgencyOverride: input.urgencyOverride,
   });
   if (!data || errors?.length) throw ApiError.from(errors, "Project creation failed");
-
-  await logEvent({ entityId: data.id, eventType: "CREATED", actorType: actor.type === "SYSTEM" ? "SYSTEM" : "USER", after: data });
   return data;
 }
 
@@ -65,11 +63,11 @@ export interface ProjectChanges {
   urgencyOverride?: number;
 }
 
-/** Updates status / dates / objective and logs STATUS_CHANGED with before/after. */
-export async function updateProject(before: Project, changes: ProjectChanges, actor: AuditActor): Promise<Project> {
+/** Updates status / dates / objective; the server logs STATUS_CHANGED with before/after. */
+export async function updateProject(before: Project, changes: ProjectChanges): Promise<Project> {
   for (const value of [changes.importanceOverride, changes.urgencyOverride]) if (value !== undefined && (!Number.isInteger(value) || value < 1 || value > 5)) throw new ApiError("Priority overrides must be whole numbers from 1 to 5", "VALIDATION");
-  const { data, errors } = await client.models.Project.update({
-    id: before.id,
+  const { data, errors } = await client.mutations.saveProject({
+    projectId: before.id,
     status: changes.status,
     startDate: changes.startDate || null,
     endDate: changes.endDate || null,
@@ -79,15 +77,6 @@ export async function updateProject(before: Project, changes: ProjectChanges, ac
     urgencyOverride: changes.urgencyOverride === undefined ? before.urgencyOverride : changes.urgencyOverride,
   });
   if (!data || errors?.length) throw ApiError.from(errors, "Project update failed");
-
-  const pick = (p: Project) => ({ status: p.status, startDate: p.startDate, endDate: p.endDate, objective: p.objective, businessImpact: p.businessImpact, importanceOverride: p.importanceOverride, urgencyOverride: p.urgencyOverride });
-  await logEvent({
-    entityId: data.id,
-    eventType: "STATUS_CHANGED",
-    actorType: actor.type === "SYSTEM" ? "SYSTEM" : "USER",
-    before: pick(before),
-    after: pick(data),
-  });
   return data;
 }
 

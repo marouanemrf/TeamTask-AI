@@ -1,3 +1,4 @@
+import { ApiError } from "./apiError";
 import { client } from "./client";
 import type { ActorType, TaskEvent, TaskEventType } from "./client";
 
@@ -43,7 +44,7 @@ export async function logEvent(event: AuditEvent): Promise<boolean> {
   }
 }
 
-/** Live history of one entity (task, project, member…). Reading is allowed to any signed-in user. */
+/** Live history of one entity (task, project, member…). The data API returns only the organisation's events. */
 export function observeEntityEvents(
   entityId: string,
   onChange: (events: TaskEvent[]) => void,
@@ -67,4 +68,20 @@ export function observeEventsByType(
     error: onError,
   });
   return () => subscription.unsubscribe();
+}
+
+/**
+ * Every audit event of the organisation since `sinceIso`, newest first (Audit page, administrators).
+ * The data API only returns events of the caller's organisation.
+ */
+export async function listAuditEvents(sinceIso: string): Promise<TaskEvent[]> {
+  const items: TaskEvent[] = [];
+  let nextToken: string | null | undefined;
+  do {
+    const page = await client.models.TaskEvent.list({ filter: { createdAt: { ge: sinceIso } }, limit: 1000, nextToken });
+    if (page.errors?.length) throw ApiError.from(page.errors, "The audit trail couldn't be loaded.");
+    items.push(...page.data);
+    nextToken = page.nextToken;
+  } while (nextToken);
+  return items.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }

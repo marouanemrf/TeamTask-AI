@@ -9,6 +9,7 @@ import { signOutUser } from "./services/authService";
 import { ToastProvider } from "./components/ui/Toaster";
 import PilotMetricsPage from "./pages/PilotMetricsPage";
 import AgentActivityPage from "./pages/AgentActivityPage";
+import AuditPage from "./pages/AuditPage";
 import DashboardPage from "./pages/DashboardPage";
 import EscalationsPage from "./pages/EscalationsPage";
 import LoginPage from "./pages/LoginPage";
@@ -51,6 +52,7 @@ function App() {
               <Route path={ROUTES.escalations} element={<EscalationsPage />} />
               <Route path={ROUTES.agentActivity} element={<AgentActivityPage />} />
               <Route path={ROUTES.pilot} element={<PilotMetricsPage />} />
+              <Route path={ROUTES.audit} element={<AuditPage />} />
               <Route path={ROUTES.team} element={<TeamPage />} />
               <Route path={ROUTES.workload} element={<WorkloadPage />} />
               <Route path={ROUTES.memberDetail} element={<MemberDetailPage />} />

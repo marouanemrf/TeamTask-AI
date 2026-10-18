@@ -13,18 +13,18 @@ import { manageProfileFunction } from '../functions/manage-profile/resource';
 import { presenceFunction } from '../functions/presence/resource';
 import { aiPlanningFunction } from '../functions/ai-planning/resource';
 import { planWorkflowFunction } from '../functions/plan-workflow/resource';
+import { manageProjectFunction } from '../functions/manage-project/resource';
 
 /**
  * TeamTask AI data model.
  *
- * Authorization vocabulary:
- * - "managers"      = Cognito groups ADMIN + PROJECT_MANAGER (full access).
- *                     Written inline as literals: a shared string[] variable would
- *                     widen the generated client types.
- * - "authenticated" = any signed-in user
- * - Task and TaskEvent are read-only for users: every write goes through the Lambda mutations
- *   below (addTask, editTask, changeTaskStatus, assignTask, cancelTask, logEvent), which
- *   enforce the business rules server-side and write the audit log.
+ * Authorization (organisation-level isolation, see amplify/functions/shared/tenancy.ts):
+ * - Reads: allow.groupDefinedIn('organisationId'): only members of the record's organisation
+ *   (Cognito group "<organisationId>"). Manager-only data (AI recommendations, approvals,
+ *   reminders, escalations) uses allow.groupDefinedIn('managersGroup'): group
+ *   "<organisationId>:MANAGERS" (ADMIN + PROJECT_MANAGER). Subscriptions are filtered the same way.
+ * - Writes: no model is writable by users. Every write goes through the Lambda mutations below,
+ *   which check the role and the organisation, enforce the business rules and write the audit log.
  *
  * @see https://docs.amplify.aws/react/build-a-backend/data/
  */
@@ -41,10 +41,8 @@ const schema = a.schema({
       teams: a.hasMany('Team', 'organisationId'),
       projects: a.hasMany('Project', 'organisationId'),
     })
-    .authorization((allow) => [
-      allow.group('ADMIN'),
-      allow.authenticated().to(['read']),
-    ]),
+    // Members read their own organisation only; it is created by the setup action of manageTeamMember.
+    .authorization((allow) => [allow.groupDefinedIn('id').to(['read'])]),
 
   // A group of members inside the organisation (e.g. "Cloud security", "GRC").
   Team: a
@@ -56,10 +54,8 @@ const schema = a.schema({
       leadMemberId: a.id(),
       members: a.hasMany('TeamMember', 'teamId'),
     })
-    .authorization((allow) => [
-      allow.groups(['ADMIN', 'PROJECT_MANAGER']),
-      allow.authenticated().to(['read']),
-    ]),
+    // Written by administrators through manageTeamMember (CREATE_TEAM / DELETE_TEAM).
+    .authorization((allow) => [allow.groupDefinedIn('organisationId').to(['read'])]),
 
   // A consultant or employee who can be assigned tasks.
   TeamMember: a
@@ -88,9 +84,7 @@ const schema = a.schema({
       team: a.belongsTo('Team', 'teamId'),
       assignedTasks: a.hasMany('Task', 'assigneeId'),
     })
-    .authorization((allow) => [
-      allow.authenticated().to(['read']),
-    ]),
+    .authorization((allow) => [allow.groupDefinedIn('organisationId').to(['read'])]),
 
   /* ---------------------------------------------------------------------- */
   /* Projects & planning                                                     */
@@ -116,27 +110,25 @@ const schema = a.schema({
       recommendations: a.hasMany('AIRecommendation', 'projectId'),
       weeklyReports: a.hasMany('WeeklyReport', 'projectId'),
     })
-    .authorization((allow) => [
-      allow.groups(['ADMIN', 'PROJECT_MANAGER']),
-      allow.authenticated().to(['read']),
-    ]),
+    // Written by managers through saveProject (organisation, role and audit checked server-side).
+    .authorization((allow) => [allow.groupDefinedIn('organisationId').to(['read'])]),
 
   // A dated checkpoint within a project.
   Milestone: a
     .model({
+      organisationId: a.id(),
       projectId: a.id().required(),
       project: a.belongsTo('Project', 'projectId'),
       name: a.string().required(),
       dueDate: a.date(),
     })
-    .authorization((allow) => [
-      allow.groups(['ADMIN', 'PROJECT_MANAGER']),
-      allow.authenticated().to(['read']),
-    ]),
+    // Written by managers through addMilestone.
+    .authorization((allow) => [allow.groupDefinedIn('organisationId').to(['read'])]),
 
   // A unit of work. Can have subtasks (self relation) and dependencies.
   Task: a
     .model({
+      organisationId: a.id(),
       projectId: a.id().required(),
       project: a.belongsTo('Project', 'projectId'),
       parentTaskId: a.id(),
@@ -158,11 +150,12 @@ const schema = a.schema({
       escalations: a.hasMany('Escalation', 'taskId'),
     })
     // Writes only through the task functions (schema-level allow.resource).
-    .authorization((allow) => [allow.authenticated().to(['read'])]),
+    .authorization((allow) => [allow.groupDefinedIn('organisationId').to(['read'])]),
 
   // Edge between two tasks: fromTask depends on toTask.
   Dependency: a
     .model({
+      organisationId: a.id(),
       fromTaskId: a.id().required(),
       fromTask: a.belongsTo('Task', 'fromTaskId'),
       toTaskId: a.id().required(),
@@ -172,7 +165,7 @@ const schema = a.schema({
     .authorization((allow) => [
       // Read-only for clients: links are written only by the task functions, which check
       // the same-project and no-cycle rules (a direct write could bypass them).
-      allow.authenticated().to(['read']),
+      allow.groupDefinedIn('organisationId').to(['read']),
     ]),
 
   /* ---------------------------------------------------------------------- */
@@ -186,6 +179,9 @@ const schema = a.schema({
   // writing the record directly.
   AIRecommendation: a
     .model({
+      organisationId: a.id(),
+      // "<organisationId>:MANAGERS": only the organisation's managers can read it.
+      managersGroup: a.string(),
       projectId: a.id().required(),
       project: a.belongsTo('Project', 'projectId'),
       type: a.enum(['TASK_PLAN', 'ASSIGNMENT', 'DEADLINE', 'REALLOCATION', 'RISK']),
@@ -198,11 +194,14 @@ const schema = a.schema({
       error: a.string(),
       approval: a.hasOne('Approval', 'recommendationId'),
     })
-    .authorization((allow) => [allow.groups(['ADMIN', 'PROJECT_MANAGER']).to(['read'])]),
+    .authorization((allow) => [allow.groupDefinedIn('managersGroup').to(['read'])]),
 
   // The human decision on a recommendation (written only by decideRecommendation).
   Approval: a
     .model({
+      organisationId: a.id(),
+      // "<organisationId>:MANAGERS": only the organisation's managers can read it.
+      managersGroup: a.string(),
       recommendationId: a.id().required(),
       recommendation: a.belongsTo('AIRecommendation', 'recommendationId'),
       approverEmail: a.email(),
@@ -210,7 +209,7 @@ const schema = a.schema({
       comment: a.string(),
       decidedAt: a.datetime(),
     })
-    .authorization((allow) => [allow.groups(['ADMIN', 'PROJECT_MANAGER']).to(['read'])]),
+    .authorization((allow) => [allow.groupDefinedIn('managersGroup').to(['read'])]),
 
   /* ---------------------------------------------------------------------- */
   /* Follow-up: reminders & escalations                                      */
@@ -218,6 +217,9 @@ const schema = a.schema({
 
   Reminder: a
     .model({
+      organisationId: a.id(),
+      // "<organisationId>:MANAGERS": only the organisation's managers can read it.
+      managersGroup: a.string(),
       taskId: a.id().required(),
       task: a.belongsTo('Task', 'taskId'),
       recipientEmail: a.email().required(),
@@ -226,17 +228,20 @@ const schema = a.schema({
       sentAt: a.datetime(),
       status: a.enum(['SCHEDULED', 'SENT', 'FAILED']),
     })
-    .authorization((allow) => [allow.groups(['ADMIN', 'PROJECT_MANAGER']).to(['read'])]),
+    .authorization((allow) => [allow.groupDefinedIn('managersGroup').to(['read'])]),
 
   Escalation: a
     .model({
+      organisationId: a.id(),
+      // "<organisationId>:MANAGERS": only the organisation's managers can read it.
+      managersGroup: a.string(),
       taskId: a.id().required(),
       task: a.belongsTo('Task', 'taskId'),
       reason: a.string().required(),
       level: a.integer(),
       status: a.enum(['OPEN', 'APPROVED', 'RESOLVED']),
     })
-    .authorization((allow) => [allow.groups(['ADMIN', 'PROJECT_MANAGER']).to(['read'])]),
+    .authorization((allow) => [allow.groupDefinedIn('managersGroup').to(['read'])]),
 
   /* ---------------------------------------------------------------------- */
   /* Audit & reporting                                                       */
@@ -245,6 +250,7 @@ const schema = a.schema({
   // Append-only audit log. Users read it; only the functions write it (no update/delete for anyone).
   TaskEvent: a
     .model({
+      organisationId: a.id(),
       entityId: a.id().required(),
       eventType: a.enum([
         'CREATED',
@@ -265,11 +271,12 @@ const schema = a.schema({
       requestId: a.string(),
     })
     .secondaryIndexes((index) => [index('requestId')])
-    .authorization((allow) => [allow.authenticated().to(['read'])]),
+    .authorization((allow) => [allow.groupDefinedIn('organisationId').to(['read'])]),
 
   // Weekly project status snapshot.
   WeeklyReport: a
     .model({
+      organisationId: a.id(),
       projectId: a.id().required(),
       project: a.belongsTo('Project', 'projectId'),
       weekNumber: a.integer().required(),
@@ -285,7 +292,7 @@ const schema = a.schema({
       // true when the summary and the corrective actions were written by the AI model.
       aiGenerated: a.boolean(),
     })
-    .authorization((allow) => [allow.authenticated().to(['read'])]),
+    .authorization((allow) => [allow.groupDefinedIn('organisationId').to(['read'])]),
 
   /* ---------------------------------------------------------------------- */
   /* Task API (Lambda): rules, idempotency (clientRequestId) and audit        */
@@ -430,14 +437,26 @@ const schema = a.schema({
     .handler(a.handler.function(weeklyReportFunction))
     .authorization((allow) => [allow.authenticated()]),
 
+  // Administrators only. Actions: CREATE / UPDATE / DELETE (member accounts in their organisation),
+  // SETUP_ORGANISATION (first administrator of a new organisation: creates it and their profile).
   manageTeamMember: a.mutation().arguments({
     action: a.string().required(), memberId: a.id(), organisationId: a.id(), name: a.string(), email: a.email(), username: a.string(), roles: a.string().array(), role: a.string(), jobTitle: a.string(), skills: a.string().array(), weeklyCapacityHours: a.integer(), avatarKey: a.string(), teamId: a.id(), unavailableFrom: a.date(), unavailableUntil: a.date(),
   }).returns(a.ref('TeamMember')).handler(a.handler.function(manageTeamMemberFunction)).authorization((allow) => [allow.authenticated()]),
+  // Administrators only: CREATE or DELETE a team of their organisation.
+  manageTeam: a.mutation().arguments({ action: a.string().required(), teamId: a.id(), name: a.string(), description: a.string(), leadMemberId: a.id() })
+    .returns(a.ref('Team')).handler(a.handler.function(manageTeamMemberFunction)).authorization((allow) => [allow.authenticated()]),
+  // Managers: create a project (no projectId) or edit one, in their organisation; audited.
+  saveProject: a.mutation().arguments({
+    projectId: a.id(), name: a.string(), clientName: a.string(), objective: a.string(), status: a.string(), startDate: a.date(), endDate: a.date(),
+    managerEmail: a.email(), businessImpact: a.string(), importanceOverride: a.integer(), urgencyOverride: a.integer(),
+  }).returns(a.ref('Project')).handler(a.handler.function(manageProjectFunction)).authorization((allow) => [allow.authenticated()]),
+  addMilestone: a.mutation().arguments({ projectId: a.id().required(), name: a.string().required(), dueDate: a.date() })
+    .returns(a.ref('Milestone')).handler(a.handler.function(manageProjectFunction)).authorization((allow) => [allow.authenticated()]),
   updateMyProfile: a.mutation().arguments({ name: a.string(), phoneNumber: a.string(), jobTitle: a.string(), skills: a.string().array(), experience: a.string(), education: a.string(), professionalSummary: a.string(), avatarKey: a.string(), unavailableFrom: a.date(), unavailableUntil: a.date() }).returns(a.ref('TeamMember')).handler(a.handler.function(manageProfileFunction)).authorization((allow) => [allow.authenticated()]),
   heartbeatPresence: a.mutation().arguments({ status: a.string().required() }).returns(a.ref('Presence')).handler(a.handler.function(presenceFunction)).authorization((allow) => [allow.authenticated()]),
 
-  Presence: a.model({ email: a.email().required(), status: a.enum(['ONLINE', 'BUSY']), lastSeenAt: a.datetime().required() })
-    .secondaryIndexes((index) => [index('email')]).authorization((allow) => [allow.authenticated().to(['read'])]),
+  Presence: a.model({ organisationId: a.id(), email: a.email().required(), status: a.enum(['ONLINE', 'BUSY']), lastSeenAt: a.datetime().required() })
+    .secondaryIndexes((index) => [index('email')]).authorization((allow) => [allow.groupDefinedIn('organisationId').to(['read'])]),
 })
   // The functions read and write every model with their own IAM identity.
   .authorization((allow) => [
@@ -455,6 +474,7 @@ const schema = a.schema({
     allow.resource(presenceFunction),
     allow.resource(aiPlanningFunction),
     allow.resource(planWorkflowFunction),
+    allow.resource(manageProjectFunction),
   ]);
 
 export type Schema = ClientSchema<typeof schema>;

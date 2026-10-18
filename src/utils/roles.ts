@@ -26,6 +26,11 @@ export function isManager(roles: readonly Role[]): boolean {
   return roles.some((role) => MANAGER_ROLES.includes(role));
 }
 
+/** Use case "Use the AI assistant" starts at Member: viewers only read (the server refuses them too). */
+export function canUseAssistant(roles: readonly Role[]): boolean {
+  return roles.some((role) => role !== "VIEWER");
+}
+
 /** The most privileged role, shown in the top bar badge. */
 export function primaryRole(roles: readonly Role[]): Role {
   return ROLES.find((role) => roles.includes(role)) ?? "VIEWER";

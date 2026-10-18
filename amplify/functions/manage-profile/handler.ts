@@ -33,8 +33,8 @@ function freeUsername(email: string, taken: Set<string>): string {
 /**
  * The signed-in user edits their own team profile (matched by the email of the session).
  * - The job title is set by managers on the Team page; only an ADMIN may change their own here.
- * - An ADMIN without a team profile yet (e.g. the first administrator of a new deployment, whose
- *   account was created in Cognito) gets one in their organisation on first save.
+ * - An ADMIN without a team profile yet (account created in Cognito and added to the organisation
+ *   groups) gets one in their organisation on first save.
  */
 export const handler: Schema['updateMyProfile']['functionHandler'] = (event) => runMutation('update-my-profile', event, async (caller, args) => {
   const phone = args.phoneNumber?.trim();
@@ -77,10 +77,11 @@ export const handler: Schema['updateMyProfile']['functionHandler'] = (event) => 
 
   if (!isAdmin) fail('NOT_FOUND', "Your team profile wasn't found. Contact an administrator.");
 
-  // First profile of an administrator: in the organisation (there must be exactly one to choose from).
-  const organisations = await listAll((nextToken) => db.models.Organisation.list({ nextToken, limit: 1000 }), 'Organisation.list');
-  if (organisations.length !== 1) fail('VALIDATION', 'Your team profile must be created by an administrator of your organisation.');
-  const organisationId = organisations[0].id;
+  // First profile of an administrator: in the organisation of their token (see shared/tenancy.ts).
+  if (!caller.organisationId) fail('VALIDATION', 'Set up your organisation first.');
+  const organisation = check(await db.models.Organisation.get({ id: caller.organisationId }), 'Organisation.get');
+  if (!organisation) fail('NOT_FOUND', "Your organisation doesn't exist.");
+  const organisationId = organisation.id;
   if (args.avatarKey && !OWN_PHOTO.test(args.avatarKey)) fail('VALIDATION', 'Invalid photo path.');
   const taken = new Set(members.filter((m) => m.organisationId === organisationId).map((m) => normalizeUsername(m.username ?? '')));
   const roles = ROLES.filter((r) => caller.roles.includes(r));

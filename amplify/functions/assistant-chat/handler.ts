@@ -83,6 +83,8 @@ export const handler = awslambda.streamifyResponse(async (event: ApiEvent, strea
   const identity = identityFromClaims(event.requestContext?.authorizer?.claims);
   if (!identity) return reply(stream, event, 401, "UNAUTHORIZED", "Sign in again.");
   if (!identity.emailVerified) return reply(stream, event, 403, "EMAIL_NOT_VERIFIED", "Verify your email address before using the assistant.");
+  // Use case "Use the AI assistant" starts at Member: viewers only read dashboards and projects.
+  if (identity.role === "VIEWER") return reply(stream, event, 403, "FORBIDDEN", "The assistant is available to members, project managers and administrators.");
 
   const body = event.isBase64Encoded && event.body ? Buffer.from(event.body, "base64").toString("utf8") : event.body;
   const request = parseChatRequest(body);

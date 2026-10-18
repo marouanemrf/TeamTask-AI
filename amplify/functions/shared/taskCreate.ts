@@ -28,16 +28,17 @@ export interface CreateTaskArgs {
  */
 export async function createTaskRecord(
   client: DataClient,
-  actor: { email: string; actorType?: "USER" | "SYSTEM" },
+  // organisationId: the caller's organisation; the project must belong to it.
+  actor: { email: string; actorType?: "USER" | "SYSTEM"; organisationId: string },
   args: CreateTaskArgs,
   createdBy: NonNullable<Schema["Task"]["type"]["createdBy"]> = "HUMAN",
 ): Promise<TaskRecord> {
   const requestId = v.requestId(args.clientRequestId);
   const previous = await findEventByRequestId(client, requestId);
-  if (previous) return getTask(client, previous.entityId);
+  if (previous) return getTask(client, previous.entityId, actor.organisationId);
 
   // --- Validate input ---
-  const project = await getProject(client, v.id(args.projectId, "Project"));
+  const project = await getProject(client, v.id(args.projectId, "Project"), actor.organisationId);
   const title = v.text(args.title, "Title", { max: 200 });
   const description = v.optionalText(args.description, "Description", 5000);
   const priority = v.priority(args.priority, "MEDIUM");
@@ -67,6 +68,7 @@ export async function createTaskRecord(
   // existing id (conditional create) and returns the task created by the first one.
   const result = await client.models.Task.create({
     id: requestId,
+    organisationId: project.organisationId,
     projectId: project.id,
     title,
     description,
@@ -84,9 +86,10 @@ export async function createTaskRecord(
   if (!created) throw new Error("Task.create returned no data");
 
   // A brand-new task can't be part of a cycle: nothing depends on it yet.
-  if (dependsOn.length) await setDependencies(client, created.id, dependsOn, await listDependencies(client, inProject));
+  if (dependsOn.length) await setDependencies(client, created.id, dependsOn, await listDependencies(client, inProject), project.organisationId);
 
   await writeEvent(client, {
+    organisationId: project.organisationId,
     entityId: created.id,
     eventType: "CREATED",
     actorEmail: actor.email,

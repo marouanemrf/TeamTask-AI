@@ -2,11 +2,14 @@ import { AdminGetUserCommand, CognitoIdentityProviderClient } from "@aws-sdk/cli
 import { fail } from "./errors";
 import { toRoles } from "./rules";
 import type { Role } from "./rules";
+import { organisationFromGroups } from "./tenancy";
 
 export interface Caller {
   username: string;
   email: string;
   roles: Role[];
+  /** From the organisation group of the token (set by the server only); undefined if none. */
+  organisationId?: string;
 }
 
 interface CognitoIdentityLike {
@@ -49,14 +52,14 @@ async function emailFor(identity: CognitoIdentityLike, username: string): Promis
 
 const UNVERIFIED = "Verify your email address before using TeamTask.";
 
-/** Caller from the AppSync identity: Cognito username, email and roles (no group = VIEWER). */
+/** Caller from the AppSync identity: Cognito username, email, roles (no group = VIEWER) and organisation. */
 export async function getCaller(identity: unknown): Promise<Caller> {
   const cognitoIdentity = (identity ?? {}) as CognitoIdentityLike;
   const username = cognitoIdentity.username ?? cognitoIdentity.sub;
-  if (!username) fail("FORBIDDEN", "Connectez-vous pour utiliser cette API.");
+  if (!username) fail("FORBIDDEN", "Sign in to use this API.");
 
   const claimGroups = cognitoIdentity.claims?.["cognito:groups"];
   const groups = cognitoIdentity.groups ?? (Array.isArray(claimGroups) ? (claimGroups as string[]) : []);
 
-  return { username, email: await emailFor(cognitoIdentity, username), roles: toRoles(groups) };
+  return { username, email: await emailFor(cognitoIdentity, username), roles: toRoles(groups), organisationId: organisationFromGroups(groups) };
 }

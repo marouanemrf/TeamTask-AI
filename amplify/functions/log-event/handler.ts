@@ -5,6 +5,7 @@ import { check, createDataClient } from "../shared/data";
 import { fail } from "../shared/errors";
 import { runMutation } from "../shared/handler";
 import { isManagerRole } from "../shared/rules";
+import { requireOrganisation } from "../shared/tenancy";
 import * as v from "../shared/validate";
 
 const client = await createDataClient(env);
@@ -16,6 +17,18 @@ function toJson(value: unknown): string | undefined {
   const json = typeof value === "string" ? value : JSON.stringify(value);
   if (json.length > 20000) fail("VALIDATION", "The audit data is too large.");
   return json;
+}
+
+/** Organisation of a non-task record (organisation, team, member, project or milestone), or null. */
+async function entityOrganisation(entityId: string): Promise<string | null> {
+  if (check(await client.models.Organisation.get({ id: entityId }), "Organisation.get")) return entityId;
+  for (const record of [
+    check(await client.models.TeamMember.get({ id: entityId }), "TeamMember.get"),
+    check(await client.models.Project.get({ id: entityId }), "Project.get"),
+    check(await client.models.Milestone.get({ id: entityId }), "Milestone.get"),
+    check(await client.models.Team.get({ id: entityId }), "Team.get"),
+  ]) if (record) return record.organisationId ?? null;
+  return null;
 }
 
 /**
@@ -39,9 +52,13 @@ export const handler: Schema["logEvent"]["functionHandler"] = (event) =>
     }
     const task = check(await client.models.Task.get({ id: entityId }), "Task.get");
     if (task) fail("VALIDATION", "Task events are recorded only by the task API.");
+    // The audited record must belong to the caller's organisation.
+    const organisationId = requireOrganisation(caller);
+    if ((await entityOrganisation(entityId)) !== organisationId) fail("NOT_FOUND", "This record doesn't exist.");
 
     const created = check(
       await client.models.TaskEvent.create({
+        organisationId,
         entityId,
         eventType: eventType as (typeof EVENT_TYPES)[number],
         actorType,

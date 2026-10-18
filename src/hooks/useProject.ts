@@ -4,7 +4,6 @@ import { createMilestone, observeMilestones } from "../services/milestoneService
 import { getProject, updateProject } from "../services/projectService";
 import type { ProjectChanges } from "../services/projectService";
 import { describeApiError } from "../utils/apiErrors";
-import { useUser } from "./useUser";
 
 interface LoadResult {
   id: string;
@@ -40,7 +39,6 @@ export function useProject(id: string | undefined) {
 
 /** Edit status / dates / objective (managers). */
 export function useProjectActions() {
-  const { email } = useUser();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -49,7 +47,7 @@ export function useProjectActions() {
       setSubmitting(true);
       setError(null);
       try {
-        return await updateProject(project, changes, { email });
+        return await updateProject(project, changes);
       } catch (err) {
         console.error("[useProjectActions] Update failed", err);
         setError(describeApiError(err));
@@ -58,7 +56,7 @@ export function useProjectActions() {
         setSubmitting(false);
       }
     },
-    [email],
+    [],
   );
 
   const clearError = useCallback(() => setError(null), []);
@@ -67,7 +65,6 @@ export function useProjectActions() {
 
 /** Live milestones of a project (sorted by due date) and a create action. */
 export function useMilestones(projectId: string | undefined) {
-  const { email } = useUser();
   const [milestones, setMilestones] = useState<Milestone[]>([]);
   const [loadedFor, setLoadedFor] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -94,7 +91,7 @@ export function useMilestones(projectId: string | undefined) {
       setSubmitting(true);
       setError(null);
       try {
-        await createMilestone({ projectId, name, dueDate }, { email });
+        await createMilestone({ projectId, name, dueDate });
         return true;
       } catch (err) {
         console.error("[useMilestones] Creation failed", err);
@@ -104,7 +101,7 @@ export function useMilestones(projectId: string | undefined) {
         setSubmitting(false);
       }
     },
-    [projectId, email],
+    [projectId],
   );
 
   const sorted = useMemo(

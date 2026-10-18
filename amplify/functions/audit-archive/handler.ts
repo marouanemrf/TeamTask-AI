@@ -15,11 +15,26 @@ interface StreamRecord {
 
 const s3 = new S3Client({});
 
+/**
+ * The organisation-isolation migration adds `organisationId` to events written before it, and
+ * changes nothing else. Such a change is archived apart ("migrations") instead of raising a
+ * tampering alert; any other difference, however small, is still tampering.
+ */
+export function isOrganisationBackfill(record: StreamRecord): boolean {
+  if (record.eventName !== "MODIFY") return false;
+  const before = (record.dynamodb?.OldImage ?? {}) as Record<string, unknown>;
+  const after = (record.dynamodb?.NewImage ?? {}) as Record<string, unknown>;
+  if ("organisationId" in before || !("organisationId" in after)) return false;
+  const keys = new Set([...Object.keys(before), ...Object.keys(after)]);
+  keys.delete("organisationId");
+  return [...keys].every((k) => JSON.stringify(before[k]) === JSON.stringify(after[k]));
+}
+
 export const handler = async (event: { Records?: StreamRecord[] }) => {
   for (const record of event.Records ?? []) {
     const at = new Date((record.dynamodb?.ApproximateCreationDateTime ?? Date.now() / 1000) * 1000);
     const day = at.toISOString().slice(0, 10).replace(/-/g, "/");
-    const kind = record.eventName === "INSERT" ? "events" : "tampering";
+    const kind = record.eventName === "INSERT" ? "events" : isOrganisationBackfill(record) ? "migrations" : "tampering";
     const key = `task-events/${kind}/${day}/${record.dynamodb?.SequenceNumber ?? record.eventID}.json`;
     await s3.send(new PutObjectCommand({
       Bucket: process.env.ARCHIVE_BUCKET!,

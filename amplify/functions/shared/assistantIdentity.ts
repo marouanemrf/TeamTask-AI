@@ -1,5 +1,6 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, ScanCommand } from "@aws-sdk/lib-dynamodb";
+import { organisationFromGroups } from "./tenancy";
 
 const db = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const orgCache = new Map<string, string | null>();
@@ -16,18 +17,16 @@ async function scanAll(TableName: string, FilterExpression?: string, values?: Re
 }
 
 /**
- * The caller's organisation, from their team record (server-side lookup by the token's email —
- * Cognito has no organisation claim). An ADMIN without a team record belongs to the only
- * organisation, if there is exactly one. Needs TABLE_TEAMMEMBER and TABLE_ORGANISATION.
+ * The caller's organisation: the organisation group of the token (set by the server only, see
+ * shared/tenancy.ts), else their team record (lookup by the token's email). Never guessed.
+ * Needs TABLE_TEAMMEMBER.
  */
-export async function organisationOf(identity: { email: string; role: string }): Promise<string | null> {
+export async function organisationOf(identity: { email: string; groups?: readonly string[] }): Promise<string | null> {
+  const fromToken = organisationFromGroups(identity.groups);
+  if (fromToken) return fromToken;
   if (orgCache.has(identity.email)) return orgCache.get(identity.email)!;
   const mine = await scanAll(process.env.TABLE_TEAMMEMBER!, "email = :e", { ":e": identity.email });
-  let orgId = (mine[0]?.organisationId as string | undefined) ?? null;
-  if (!orgId && identity.role === "ADMIN") {
-    const orgs = await scanAll(process.env.TABLE_ORGANISATION!);
-    if (orgs.length === 1) orgId = String(orgs[0].id);
-  }
+  const orgId = (mine[0]?.organisationId as string | undefined) ?? null;
   orgCache.set(identity.email, orgId);
   return orgId;
 }

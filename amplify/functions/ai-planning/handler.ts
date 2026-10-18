@@ -8,6 +8,7 @@ import { runMutation } from "../shared/handler";
 import { loadPlanContext, readPayload } from "../shared/planData";
 import { normalisePlan, SCOPE_MAX, SCOPE_MIN } from "../shared/planning";
 import { isManagerRole } from "../shared/rules";
+import { assertSameOrganisation, forManagers, requireOrganisation } from "../shared/tenancy";
 import * as v from "../shared/validate";
 
 const client = await createDataClient(env);
@@ -18,19 +19,20 @@ const PLANS_PER_HOUR = 5;
 type RequestArgs = { clientRequestId: string; projectId: string; scope: string };
 type DecideArgs = { clientRequestId: string; recommendationId: string; decision: string; comment?: string | null; tasks?: unknown };
 
-async function recommendation(id: string) {
+async function recommendation(id: string, organisationId: string) {
   const record = check(await client.models.AIRecommendation.get({ id }), "AIRecommendation.get");
   if (!record) fail("NOT_FOUND", "This plan no longer exists.");
+  assertSameOrganisation(record, organisationId, "This plan");
   return record;
 }
 
 /** A manager asks the AI for a plan: the record is created and the approval workflow started. */
-async function requestPlan(caller: { email: string }, args: RequestArgs) {
+async function requestPlan(caller: { email: string; organisationId: string }, args: RequestArgs) {
   const requestId = v.requestId(args.clientRequestId);
   const existing = check(await client.models.AIRecommendation.get({ id: requestId }), "AIRecommendation.get");
-  if (existing) return existing;
+  if (existing) return recommendation(existing.id, caller.organisationId);
 
-  const project = await getProject(client, v.id(args.projectId, "Project"));
+  const project = await getProject(client, v.id(args.projectId, "Project"), caller.organisationId);
   if (project.status === "CLOSED") fail("VALIDATION", "This project is closed.");
   const scope = v.text(args.scope, "Scope", { min: SCOPE_MIN, max: SCOPE_MAX });
 
@@ -40,6 +42,7 @@ async function requestPlan(caller: { email: string }, args: RequestArgs) {
 
   const created = check(await client.models.AIRecommendation.create({
     id: requestId,
+    ...forManagers(project.organisationId),
     projectId: project.id,
     type: "TASK_PLAN",
     status: "GENERATING",
@@ -63,19 +66,19 @@ async function requestPlan(caller: { email: string }, args: RequestArgs) {
  * handed to the workflow, which creates the tasks; REJECTED: nothing is created. Either way the
  * decision is recorded (Approval + audit event).
  */
-async function decide(caller: { email: string }, args: DecideArgs) {
+async function decide(caller: { email: string; organisationId: string }, args: DecideArgs) {
   const requestId = v.requestId(args.clientRequestId);
   const recId = v.id(args.recommendationId, "Plan");
   const already = check(await client.models.Approval.get({ id: requestId }), "Approval.get");
-  if (already) return recommendation(recId);
+  if (already) return recommendation(recId, caller.organisationId);
 
   const decision = args.decision;
   if (decision !== "APPROVED" && decision !== "REJECTED") fail("VALIDATION", "The decision must be APPROVED or REJECTED.");
   const comment = v.optionalText(args.comment, "Comment", 1000);
-  const rec = await recommendation(recId);
+  const rec = await recommendation(recId, caller.organisationId);
   if (rec.type !== "TASK_PLAN") fail("VALIDATION", "Only task plans can be decided here.");
   if (rec.status !== "PENDING" || !rec.workflowToken) fail("VALIDATION", rec.status === "GENERATING" ? "The plan is still being prepared." : "This plan has already been handled.");
-  const project = await getProject(client, rec.projectId);
+  const project = await getProject(client, rec.projectId, caller.organisationId);
   const payload = readPayload(rec);
   if (!payload.plan) fail("VALIDATION", "This plan has no tasks.");
 
@@ -114,8 +117,9 @@ async function decide(caller: { email: string }, args: DecideArgs) {
     await client.models.AIRecommendation.update({ id: rec.id, status: "PENDING", workflowToken: rec.workflowToken, payload: JSON.stringify(payload) });
     throw error;
   }
-  check(await client.models.Approval.create({ id: requestId, recommendationId: rec.id, approverEmail: caller.email, decision, comment, decidedAt }), "Approval.create");
+  check(await client.models.Approval.create({ id: requestId, ...forManagers(project.organisationId), recommendationId: rec.id, approverEmail: caller.email, decision, comment, decidedAt }), "Approval.create");
   await writeEvent(client, {
+    organisationId: project.organisationId,
     entityId: project.id,
     eventType: decision,
     actorEmail: caller.email,
@@ -123,11 +127,12 @@ async function decide(caller: { email: string }, args: DecideArgs) {
     after: { recommendationId: rec.id, decision, approvedTasks: approvedPlan?.tasks.length ?? 0, comment },
     requestId,
   });
-  return recommendation(rec.id);
+  return recommendation(rec.id, caller.organisationId);
 }
 
 export const handler = (event: { arguments: RequestArgs | DecideArgs; identity?: unknown }) =>
   runMutation("ai-planning", event, async (caller, args) => {
     if (!isManagerRole(caller.roles)) fail("FORBIDDEN", "Only administrators and project managers can plan projects.");
-    return "decision" in args ? decide(caller, args) : requestPlan(caller, args);
+    const scoped = { email: caller.email, organisationId: requireOrganisation(caller) };
+    return "decision" in args ? decide(scoped, args) : requestPlan(scoped, args);
   }) as ReturnType<Schema["requestProjectPlan"]["functionHandler"]>;

@@ -4,6 +4,7 @@ import { findEventByRequestId, writeEvent } from "../shared/audit";
 import { check, createDataClient, getAssignee, getProject, getTask } from "../shared/data";
 import { fail } from "../shared/errors";
 import { runMutation } from "../shared/handler";
+import { requireOrganisation } from "../shared/tenancy";
 import { canPerform } from "../shared/rules";
 import * as v from "../shared/validate";
 
@@ -12,19 +13,20 @@ const client = await createDataClient(env);
 /** Changes (or clears) a task's assignee (managers) and logs ASSIGNED. */
 export const handler: Schema["assignTask"]["functionHandler"] = (event) =>
   runMutation("assign-task", event, async (caller, args) => {
+    const organisationId = requireOrganisation(caller);
     if (!canPerform("assign", caller.roles)) fail("FORBIDDEN", "Only administrators and project managers can assign tasks.");
 
     const requestId = v.requestId(args.clientRequestId);
     const taskId = v.id(args.taskId, "Task");
     const previous = await findEventByRequestId(client, requestId);
-    if (previous) return getTask(client, previous.entityId);
+    if (previous) return getTask(client, previous.entityId, organisationId);
 
-    const task = await getTask(client, taskId);
+    const task = await getTask(client, taskId, organisationId);
     if (task.status === "CANCELLED") fail("VALIDATION", "A cancelled task can't be reassigned.");
     // A task can be reassigned, never left without an assignee.
     if (!args.assigneeId) fail("VALIDATION", "Every task must be assigned to a team member.");
     const assigneeId = v.id(args.assigneeId, "Assignee");
-    const project = await getProject(client, task.projectId);
+    const project = await getProject(client, task.projectId, organisationId);
     await getAssignee(client, assigneeId, project.organisationId);
     if ((task.assigneeId ?? null) === assigneeId) return task;
 
@@ -32,6 +34,7 @@ export const handler: Schema["assignTask"]["functionHandler"] = (event) =>
     if (!updated) throw new Error("Task.update returned no data");
 
     await writeEvent(client, {
+      organisationId,
       entityId: taskId,
       eventType: "ASSIGNED",
       actorEmail: caller.email,

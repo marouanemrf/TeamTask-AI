@@ -4,6 +4,7 @@ import { getAmplifyDataClientConfig } from "@aws-amplify/backend/function/runtim
 import type { Schema } from "../../data/resource";
 import { fail } from "./errors";
 import { canBeAssigned } from "./rules";
+import { assertSameOrganisation } from "./tenancy";
 
 export type DataClient = ReturnType<typeof generateClient<Schema>>;
 export type TaskRecord = Schema["Task"]["type"];
@@ -27,15 +28,19 @@ function check<T>(result: { data: T; errors?: readonly { message: string }[] }, 
 /* Reads                                                                       */
 /* -------------------------------------------------------------------------- */
 
-export async function getTask(client: DataClient, taskId: string): Promise<TaskRecord> {
+/** The task; with `organisationId`, a task of another organisation is reported as not found. */
+export async function getTask(client: DataClient, taskId: string, organisationId?: string): Promise<TaskRecord> {
   const task = check(await client.models.Task.get({ id: taskId }), "Task.get");
   if (!task) fail("NOT_FOUND", "This task no longer exists.");
+  if (organisationId !== undefined) assertSameOrganisation(task, organisationId, "This task");
   return task;
 }
 
-export async function getProject(client: DataClient, projectId: string) {
+/** The project; with `organisationId`, a project of another organisation is reported as not found. */
+export async function getProject(client: DataClient, projectId: string, organisationId?: string) {
   const project = check(await client.models.Project.get({ id: projectId }), "Project.get");
   if (!project) fail("NOT_FOUND", "This project no longer exists.");
+  if (organisationId !== undefined) assertSameOrganisation(project, organisationId, "This project");
   return project;
 }
 
@@ -102,6 +107,7 @@ export async function setDependencies(
   taskId: string,
   dependsOn: readonly string[],
   current: readonly DependencyRecord[],
+  organisationId: string,
 ): Promise<void> {
   const existing = current.filter((d) => d.fromTaskId === taskId);
   const wanted = new Set(dependsOn);
@@ -110,7 +116,7 @@ export async function setDependencies(
   }
   const have = new Set(existing.map((d) => d.toTaskId));
   for (const toTaskId of dependsOn.filter((id) => !have.has(id))) {
-    check(await client.models.Dependency.create({ fromTaskId: taskId, toTaskId, type: "FINISH_TO_START" }), "Dependency.create");
+    check(await client.models.Dependency.create({ fromTaskId: taskId, toTaskId, type: "FINISH_TO_START", organisationId }), "Dependency.create");
   }
 }
 

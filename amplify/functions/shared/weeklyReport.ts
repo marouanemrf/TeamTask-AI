@@ -131,6 +131,7 @@ export async function generateProjectReport(client: DataClient, ses: SESv2Client
   }
   const created = await client.models.WeeklyReport.create({
     id: reportId(project.id, year, weekNumber),
+    organisationId: project.organisationId,
     projectId: project.id,
     year,
     weekNumber,

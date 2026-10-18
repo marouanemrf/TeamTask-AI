@@ -3,12 +3,13 @@ import type { ReactNode } from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
 import { useTeamMembers } from "../../hooks/useTeam";
 import { useUser } from "../../hooks/useUser";
+import { canUseAssistant } from "../../utils/roles";
 import { normalizeEmail } from "../../utils/text";
 import { ROUTES, pageTitle } from "../../utils/routes";
 import AssistantWidget from "../agent/AssistantWidget";
 import MemberAvatar from "../team/MemberAvatar";
 import PresenceDot from "../team/PresenceDot";
-import { ChartIcon, ChatIcon, CloseIcon, DashboardIcon, FlagIcon, FolderIcon, MenuIcon, ProfileIcon, ShieldIcon, SignOutIcon, TasksIcon, TeamIcon } from "../ui/Icons";
+import { ChartIcon, ChatIcon, CloseIcon, DashboardIcon, FlagIcon, FolderIcon, LockIcon, MenuIcon, ProfileIcon, ShieldIcon, SignOutIcon, TasksIcon, TeamIcon } from "../ui/Icons";
 import ThemeToggle from "../ui/ThemeToggle";
 import BrandLogo from "../ui/BrandLogo";
 import BlurText from "../reactbits/BlurText";
@@ -22,6 +23,7 @@ interface NavItem {
   /** Which URLs highlight this entry ("/team/workload" must not also highlight "Team"). */
   isActive: (pathname: string) => boolean;
   managersOnly?: boolean;
+  adminOnly?: boolean;
 }
 
 const NAV_ITEMS: readonly NavItem[] = [
@@ -33,11 +35,13 @@ const NAV_ITEMS: readonly NavItem[] = [
   { to: ROUTES.escalations, label: "Open escalations", icon: <ShieldIcon />, isActive: (p) => p.startsWith(ROUTES.escalations), managersOnly: true },
   { to: ROUTES.agentActivity, label: "Agent activity", icon: <ChatIcon />, isActive: (p) => p.startsWith(ROUTES.agentActivity) },
   { to: ROUTES.pilot, label: "Pilot metrics", icon: <FlagIcon />, isActive: (p) => p.startsWith(ROUTES.pilot), managersOnly: true },
+  { to: ROUTES.audit, label: "Audit trail", icon: <LockIcon />, isActive: (p) => p.startsWith(ROUTES.audit), adminOnly: true },
 ];
 
 /** Authenticated shell: sidebar navigation (off-canvas below 768px), top bar, page outlet. */
 function AppLayout() {
-  const { email, isManager, organisationStatus, signOut } = useUser();
+  const { email, roles, isManager, isAdmin, organisationStatus, signOut } = useUser();
+  const assistantAllowed = canUseAssistant(roles);
   const { members } = useTeamMembers();
   // The signed-in user's team profile (for the top bar picture), matched by email.
   const me = email ? members.find((m) => normalizeEmail(m.email) === normalizeEmail(email)) : undefined;
@@ -88,7 +92,7 @@ function AppLayout() {
         </div>
         <nav>
           <ul className="sidebar__nav">
-            {NAV_ITEMS.filter((item) => !item.managersOnly || isManager).map((item) => {
+            {NAV_ITEMS.filter((item) => (!item.managersOnly || isManager) && (!item.adminOnly || isAdmin)).map((item) => {
               const active = item.isActive(pathname);
               return (
                 <li key={item.to}>
@@ -162,8 +166,8 @@ function AppLayout() {
         </main>
       </div>
       <SmoothScroll />
-      {/* The TeamTask assistant, for every role (permissions are applied by the server tools). */}
-      <AssistantWidget />
+      {/* The TeamTask assistant, from Member up (use case "Use the AI assistant"); the server refuses viewers too. */}
+      {assistantAllowed && <AssistantWidget />}
     </div>
   );
 }

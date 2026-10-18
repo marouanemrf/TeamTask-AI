@@ -30,18 +30,22 @@ interface Op {
 }
 
 const OPS: Op[] = [
+  // Models are read-only for users: every write goes through a function that checks role and organisation.
   {
     name: "createProject (direct model write)",
-    allowed: MANAGERS,
+    allowed: [],
     call: (k) => as(k, M.createProject, { input: { organisationId: fx.orgAId, name: `sec role ${k}`, status: "DRAFT" } }),
     after: (_k, r) => { const id = (r.data?.createProject as { id?: string } | null)?.id; if (id) createdProjects.push(id); },
   },
-  { name: "updateProject", allowed: MANAGERS, call: (k) => as(k, M.updateProject, { input: { id: fx.projects.A.id, name: fx.projects.A.name } }) },
-  { name: "createMilestone", allowed: MANAGERS, call: (k) => as(k, M.createMilestone, { input: { projectId: fx.projects.A.id, name: `sec role ${k}` } }) },
+  { name: "updateProject (direct model write)", allowed: [], call: (k) => as(k, M.updateProject, { input: { id: fx.projects.A.id, name: fx.projects.A.name } }) },
+  { name: "saveProject (edit org A project, unchanged status)", allowed: MANAGERS, call: (k) => as(k, M.saveProject, { projectId: fx.projects.A.id, status: "ACTIVE" }) },
+  { name: "addMilestone", allowed: MANAGERS, call: (k) => as(k, M.addMilestone, { projectId: fx.projects.A.id, name: `sec role ${k}` }) },
+  { name: "manageTeam DELETE (unknown id)", allowed: ["ADMIN"], acceptable: /\[NOT_FOUND\]/, call: (k) => as(k, M.manageTeam, { action: "DELETE", teamId: "sec-missing-team" }) },
+  { name: "createMilestone (direct model write)", allowed: [], call: (k) => as(k, M.createMilestone, { input: { projectId: fx.projects.A.id, name: `sec role ${k}` } }) },
   { name: "createDependency (direct, must go through editTask)", allowed: [], call: (k) => as(k, M.createDependency, { input: { fromTaskId: fx.tasks.A.id, toTaskId: fx.tasks.A.id, type: "FINISH_TO_START" } }) },
   {
-    name: "createOrganisation",
-    allowed: ["ADMIN"],
+    name: "createOrganisation (direct model write)",
+    allowed: [],
     call: (k) => as(k, M.createOrganisation, { input: { name: `sec role org ${k}` } }),
     after: (_k, r) => { const id = (r.data?.createOrganisation as { id?: string } | null)?.id; if (id) createdOrgs.push(id); },
   },
@@ -55,8 +59,9 @@ const OPS: Op[] = [
   { name: "generateWeeklyReport", allowed: ["ADMIN"], call: (k) => as(k, M.generateWeeklyReport, { projectId: fx.projects.A.id }) },
   { name: "resolveEscalation (unknown id)", allowed: MANAGERS, acceptable: /\[NOT_FOUND\]/, call: (k) => as(k, M.resolveEscalation, { clientRequestId: uuid(), escalationId: "sec-missing-escalation", decision: "ACCEPT_DELAY" }) },
   {
+    // Use case "Manage accounts": administrators only.
     name: "manageTeamMember UPDATE (viewer record, unchanged values)",
-    allowed: MANAGERS,
+    allowed: ["ADMIN"],
     call: (k) => as(k, M.manageTeamMember, { action: "UPDATE", memberId: fx.users.A_VIEWER.memberId, organisationId: fx.orgAId, name: "Security A_VIEWER", email: fx.users.A_VIEWER.email, username: "sec-a-viewer", roles: ["VIEWER"], weeklyCapacityHours: 40 }),
     // The viewer editing its own record is refused by the self-edit rule, which is also a deny.
   },

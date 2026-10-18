@@ -1,8 +1,6 @@
 import { ApiError } from "./apiError";
-import { logEvent } from "./auditService";
 import { client } from "./client";
 import type { Milestone } from "./client";
-import type { AuditActor } from "./teamService";
 
 /** Live list of a project's milestones. Returns an unsubscribe function. */
 export function observeMilestones(
@@ -17,18 +15,15 @@ export function observeMilestones(
   return () => subscription.unsubscribe();
 }
 
+/** Adds a milestone (managers); the server checks the project's organisation and audits it. */
 export async function createMilestone(
   input: { projectId: string; name: string; dueDate?: string },
-  actor: AuditActor,
 ): Promise<Milestone> {
-  const { data, errors } = await client.models.Milestone.create({
+  const { data, errors } = await client.mutations.addMilestone({
     projectId: input.projectId,
     name: input.name,
     dueDate: input.dueDate || undefined,
   });
   if (!data || errors?.length) throw ApiError.from(errors, "Milestone creation failed");
-
-  const { id, projectId, name, dueDate } = data;
-  await logEvent({ entityId: id, eventType: "CREATED", actorType: actor.type === "SYSTEM" ? "SYSTEM" : "USER", after: { id, projectId, name, dueDate } });
   return data;
 }

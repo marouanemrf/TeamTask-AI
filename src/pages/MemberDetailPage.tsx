@@ -22,7 +22,7 @@ import LoadingState from "../components/ui/LoadingState";
 function MemberDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { isManager, isAdmin, email: myEmail } = useUser();
+  const { isAdmin, email: myEmail } = useUser();
   const { members, loading } = useTeamMembers();
   const { tasks, loading: tasksLoading } = useTasks();
   const { projects } = useProjects();
@@ -102,8 +102,8 @@ function MemberDetailPage() {
           )}
         </div>
         
-        {/* Own record: only an administrator edits it here (others use My profile); nobody deletes themselves. */}
-        {isManager && (!isSelf || isAdmin) && (
+        {/* Use case "Manage accounts": administrators only (checked again on the server); nobody deletes themselves. */}
+        {isAdmin && (
           <div className="member-header__actions">
             <button
               type="button"

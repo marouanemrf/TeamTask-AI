@@ -3,8 +3,9 @@
  * - Cognito users with permanent passwords (no invitation email is sent):
  *     org A (the existing organisation): ADMIN, PROJECT_MANAGER, MEMBER, VIEWER
  *     org B (a second organisation):     PROJECT_MANAGER
- * - their TeamMember records, org B, one project + one task per org (org A's task is assigned to
- *   the MEMBER, so "own task" rules can be tested).
+ * - their TeamMember records and organisation groups (data isolation: "<org>" and, for managers,
+ *   "<org>:MANAGERS"), org B, one project + one task per org (org A's task is assigned to the
+ *   MEMBER, so "own task" rules can be tested).
  * Writes the ids to tests/security/.fixtures.json (git-ignored).
  *
  * Passwords come from the environment, never from the repo:
@@ -22,6 +23,7 @@ import {
   AdminGetUserCommand,
   AdminSetUserPasswordCommand,
   CognitoIdentityProviderClient,
+  CreateGroupCommand,
 } from "@aws-sdk/client-cognito-identity-provider";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, PutCommand, ScanCommand } from "@aws-sdk/lib-dynamodb";
@@ -120,6 +122,12 @@ for (const key of USER_KEYS) {
     skills: ["Security testing"],
     weeklyCapacityHours: 40,
   });
+  // Organisation groups: what lets the data API return this organisation's records to the user.
+  const groups = ROLE[key] === "ADMIN" || ROLE[key] === "PROJECT_MANAGER" ? [org, `${org}:MANAGERS`] : [org];
+  for (const group of groups) {
+    await cognito.send(new CreateGroupCommand({ UserPoolId: userPoolId, GroupName: group })).catch((error: Error) => { if (error.name !== "GroupExistsException") throw error; });
+    await cognito.send(new AdminAddUserToGroupCommand({ UserPoolId: userPoolId, Username: emailOf(key), GroupName: group }));
+  }
   users[key] = { email: emailOf(key), role: ROLE[key], org, memberId, sub };
 }
 
@@ -131,8 +139,8 @@ const projects = {
   B: { id: "sec-project-b", organisationId: orgBId, name: "Security test project B", clientName: "Org B", status: "ACTIVE", startDate: today, endDate: inDays(30), managerEmail: users.B_PM.email, businessImpact: "HIGH" },
 };
 const tasks = {
-  A: { id: "sec-task-a", projectId: projects.A.id, title: "Security test task A", status: "TODO", priority: "HIGH", dueDate: inDays(5), estimatedHours: 4, requiredSkills: [], createdBy: "HUMAN", assigneeId: users.A_MEMBER.memberId },
-  B: { id: "sec-task-b", projectId: projects.B.id, title: "Security test task B", status: "TODO", priority: "HIGH", dueDate: inDays(5), estimatedHours: 4, requiredSkills: [], createdBy: "HUMAN", assigneeId: users.B_PM.memberId },
+  A: { id: "sec-task-a", organisationId: orgAId, projectId: projects.A.id, title: "Security test task A", status: "TODO", priority: "HIGH", dueDate: inDays(5), estimatedHours: 4, requiredSkills: [], createdBy: "HUMAN", assigneeId: users.A_MEMBER.memberId },
+  B: { id: "sec-task-b", organisationId: orgBId, projectId: projects.B.id, title: "Security test task B", status: "TODO", priority: "HIGH", dueDate: inDays(5), estimatedHours: 4, requiredSkills: [], createdBy: "HUMAN", assigneeId: users.B_PM.memberId },
 };
 // Reset on every run: earlier runs may have changed them (status, assignee, cancellation).
 const reset = (model: string, item: Record<string, unknown>) =>

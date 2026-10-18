@@ -6,6 +6,7 @@ import { projectUrl, renderEmail, taskUrl } from '../shared/emailTemplates';
 import { selectDeadlineAction } from '../shared/automationRules';
 import { config } from '../shared/config';
 import { chatChannel, postToChat } from '../shared/notify';
+import { forManagers } from '../shared/tenancy';
 
 const client = await createDataClient(env);
 const ses = new SESv2Client({ region: 'eu-north-1' });
@@ -46,7 +47,7 @@ async function reminderExists(taskId: string, recipientEmail: string, today: str
   return false;
 }
 
-async function sendAndRecord(taskId: string, recipientEmail: string, subject: string, heading: string, body: string, link: string, linkLabel: string) {
+async function sendAndRecord(organisationId: string, taskId: string, recipientEmail: string, subject: string, heading: string, body: string, link: string, linkLabel: string) {
   const now = new Date();
   const content = renderEmail({ subject, heading, body, link, linkLabel });
   let status: 'SENT' | 'FAILED' = 'SENT';
@@ -62,12 +63,12 @@ async function sendAndRecord(taskId: string, recipientEmail: string, subject: st
     sentAt = null;
     console.error(JSON.stringify({ fn: 'deadline-check', taskId, recipientEmail, error: error instanceof Error ? error.message : String(error) }));
   }
-  check(await client.models.Reminder.create({ taskId, recipientEmail, channel: 'EMAIL', scheduledAt: now.toISOString(), sentAt, status }), 'Reminder.create');
+  check(await client.models.Reminder.create({ ...forManagers(organisationId), taskId, recipientEmail, channel: 'EMAIL', scheduledAt: now.toISOString(), sentAt, status }), 'Reminder.create');
   // Optional Teams / Slack channel (webhook in SSM): same message, recorded as its own reminder.
   const channel = await chatChannel();
   if (channel) {
     const posted = await postToChat(`${heading}: ${body}`, { url: link, label: linkLabel });
-    check(await client.models.Reminder.create({ taskId, recipientEmail, channel, scheduledAt: now.toISOString(), sentAt: posted ? now.toISOString() : null, status: posted ? 'SENT' : 'FAILED' }), 'Reminder.create');
+    check(await client.models.Reminder.create({ ...forManagers(organisationId), taskId, recipientEmail, channel, scheduledAt: now.toISOString(), sentAt: posted ? now.toISOString() : null, status: posted ? 'SENT' : 'FAILED' }), 'Reminder.create');
   }
   return status === 'SENT';
 }
@@ -91,7 +92,7 @@ export const handler = async () => {
       if (member?.email && action.sendReminder && !(await reminderExists(task.id, member.email, today))) {
         const isOverdue = action.overdueDays > 0;
         const when = isOverdue ? `${action.overdueDays} day(s) overdue` : `due on ${task.dueDate}`;
-        await sendAndRecord(task.id, member.email, `Reminder: ${task.title}`, `Task reminder`, `The task “${task.title}” is ${when}.`, taskUrl(appUrl, project.id, task.id), 'Open the project');
+        await sendAndRecord(project.organisationId, task.id, member.email, `Reminder: ${task.title}`, `Task reminder`, `The task “${task.title}” is ${when}.`, taskUrl(appUrl, project.id, task.id), 'Open the project');
       }
 
       if (!action.escalate) continue;
@@ -107,11 +108,11 @@ export const handler = async () => {
       const impacted = dependencies.filter((edge) => edge.toTaskId === task.id).map((edge) => taskById.get(edge.fromTaskId)?.title).filter((title): title is string => !!title);
       const impactText = impacted.length ? `Blocked tasks: ${impacted.join(', ')}.` : 'No dependent tasks found.';
       const reason = `${action.overdueDays} day(s) overdue. ${impactText}`;
-      const escalation = check(await client.models.Escalation.create({ taskId: task.id, status: 'OPEN', level: 1, reason }), 'Escalation.create');
+      const escalation = check(await client.models.Escalation.create({ ...forManagers(project.organisationId), taskId: task.id, status: 'OPEN', level: 1, reason }), 'Escalation.create');
       if (!escalation) throw new Error('Escalation.create returned no data');
-      check(await client.models.TaskEvent.create({ entityId: task.id, eventType: 'ESCALATED', actorType: 'SYSTEM', actorEmail: env.SENDER_EMAIL, after: JSON.stringify({ escalationId: escalation.id, reason, impacted }) }), 'TaskEvent.create');
+      check(await client.models.TaskEvent.create({ organisationId: project.organisationId, entityId: task.id, eventType: 'ESCALATED', actorType: 'SYSTEM', actorEmail: env.SENDER_EMAIL, after: JSON.stringify({ escalationId: escalation.id, reason, impacted }) }), 'TaskEvent.create');
       if (project.managerEmail) {
-        await sendAndRecord(task.id, project.managerEmail, `Escalation: ${task.title}`, 'A task needs your attention', `“${task.title}” is ${action.overdueDays} day(s) overdue. ${impactText}`, projectUrl(appUrl, project.id), 'Open the project');
+        await sendAndRecord(project.organisationId, task.id, project.managerEmail, `Escalation: ${task.title}`, 'A task needs your attention', `“${task.title}” is ${action.overdueDays} day(s) overdue. ${impactText}`, projectUrl(appUrl, project.id), 'Open the project');
       }
     } catch (error) {
       console.error(JSON.stringify({ fn: 'deadline-check', taskId: task.id, error: error instanceof Error ? error.stack : String(error) }));

@@ -5,6 +5,8 @@ import type { DataClient, TaskRecord } from "./data";
 type TaskEventType = NonNullable<Schema["TaskEvent"]["type"]["eventType"]>;
 
 export interface AuditInput {
+  /** Organisation of the audited record: only its members can read the event. */
+  organisationId: string;
   entityId: string;
   eventType: TaskEventType;
   actorEmail: string;
@@ -40,6 +42,7 @@ export function isDuplicateWrite(errors: readonly { errorType?: string | null; m
 export async function writeEvent(client: DataClient, input: AuditInput): Promise<boolean> {
   const result = await client.models.TaskEvent.create({
       id: `${input.requestId}:${input.eventType}`,
+      organisationId: input.organisationId,
       entityId: input.entityId,
       eventType: input.eventType,
       actorType: input.actorType ?? "USER",

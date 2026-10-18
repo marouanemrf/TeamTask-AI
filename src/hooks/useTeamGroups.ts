@@ -43,7 +43,7 @@ export function useTeamGroups() {
     teams: teams && teams.org === organisationId ? teams.items : [],
     busy,
     error,
-    create: (input: { name: string; description?: string; leadMemberId?: string | null }) => (organisationId ? run(() => createTeam(organisationId, input)) : Promise.resolve(false)),
+    create: (input: { name: string; description?: string; leadMemberId?: string | null }) => (organisationId ? run(() => createTeam(input)) : Promise.resolve(false)),
     remove: (team: TeamGroup, memberCount: number) => run(() => deleteTeam(team, memberCount)),
   };
 }

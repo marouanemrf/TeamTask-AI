@@ -4,6 +4,7 @@ import { findEventByRequestId, snapshot, writeEvent } from "../shared/audit";
 import { check, createDataClient, getAssignee, getProject, getTask, listDependencies, listProjectTasks, setDependencies } from "../shared/data";
 import { fail } from "../shared/errors";
 import { runMutation } from "../shared/handler";
+import { requireOrganisation } from "../shared/tenancy";
 import { canPerform, dependsOnIds, descendantIds, dueDateWarning, wouldCreateCycle } from "../shared/rules";
 import * as v from "../shared/validate";
 
@@ -15,16 +16,17 @@ const client = await createDataClient(env);
  */
 export const handler: Schema["editTask"]["functionHandler"] = (event) =>
   runMutation("update-task", event, async (caller, args) => {
+    const organisationId = requireOrganisation(caller);
     if (!canPerform("update", caller.roles)) fail("FORBIDDEN", "Only administrators and project managers can edit tasks.");
 
     const requestId = v.requestId(args.clientRequestId);
     const taskId = v.id(args.taskId, "Task");
     const previous = await findEventByRequestId(client, requestId);
-    if (previous) return getTask(client, previous.entityId);
+    if (previous) return getTask(client, previous.entityId, organisationId);
 
-    const before = await getTask(client, taskId);
+    const before = await getTask(client, taskId, organisationId);
     if (before.status === "CANCELLED") fail("VALIDATION", "A cancelled task can't be edited.");
-    const project = await getProject(client, before.projectId);
+    const project = await getProject(client, before.projectId, organisationId);
 
     // --- Validate input ---
     const title = v.text(args.title, "Title", { max: 200 });
@@ -63,9 +65,10 @@ export const handler: Schema["editTask"]["functionHandler"] = (event) =>
       "Task.update",
     );
     if (!updated) throw new Error("Task.update returned no data");
-    await setDependencies(client, taskId, dependsOn, deps);
+    await setDependencies(client, taskId, dependsOn, deps, organisationId);
 
     await writeEvent(client, {
+      organisationId,
       entityId: taskId,
       eventType: "UPDATED",
       actorEmail: caller.email,
@@ -75,6 +78,7 @@ export const handler: Schema["editTask"]["functionHandler"] = (event) =>
     });
     if ((before.assigneeId ?? null) !== (updated.assigneeId ?? null)) {
       await writeEvent(client, {
+        organisationId,
         entityId: taskId,
         eventType: "ASSIGNED",
         actorEmail: caller.email,

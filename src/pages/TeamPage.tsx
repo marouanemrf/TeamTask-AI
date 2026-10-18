@@ -17,7 +17,7 @@ type RoleFilter = TeamRole | "ALL";
 
 function TeamPage() {
   const id = useId();
-  const { isManager, isAdmin } = useUser();
+  const { isAdmin } = useUser();
   const { members, loading, error } = useTeamMembers();
   const { tasks } = useTasks();
   const { create, submitting, error: saveError, clearError } = useMemberActions();
@@ -102,7 +102,8 @@ function TeamPage() {
             </select>
           </div>
         )}
-        {isManager && (
+        {/* Use case "Manage accounts, teams": administrators only (checked again on the server). */}
+        {isAdmin && (
           <button type="button" className="button-primary button-primary--inline" onClick={openModal}>
             <PlusIcon />
             <span>Add member</span>
@@ -133,7 +134,7 @@ function TeamPage() {
       )}
 
       {!loading && !error && teamGroups.available && (
-        <TeamsPanel teams={teamGroups.teams} members={members} canManage={isManager} busy={teamGroups.busy} error={teamGroups.error} onCreate={teamGroups.create} onDelete={teamGroups.remove} />
+        <TeamsPanel teams={teamGroups.teams} members={members} canManage={isAdmin} busy={teamGroups.busy} error={teamGroups.error} onCreate={teamGroups.create} onDelete={teamGroups.remove} />
       )}
 
       {modalOpen && (

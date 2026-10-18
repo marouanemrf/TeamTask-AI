@@ -4,29 +4,32 @@ import { check, createDataClient } from '../shared/data';
 import { fail } from '../shared/errors';
 import { getCaller } from '../shared/auth';
 import { TaskApiError, toClientMessage } from '../shared/errors';
+import { requireOrganisation } from '../shared/tenancy';
 const db = await createDataClient(env);
 export const handler: Schema['heartbeatPresence']['functionHandler'] = async (event) => {
   try {
     const caller = await getCaller(event.identity);
     const args = event.arguments;
     if (args.status !== 'ONLINE' && args.status !== 'BUSY') fail('VALIDATION', 'Unknown presence status.');
+    // Only the members of the same organisation see the status.
+    const organisationId = requireOrganisation(caller);
     const timestamp = new Date().toISOString();
     // One row per user with a deterministic id: a direct get (a filtered list with a small
     // limit can miss the row, since DynamoDB applies the limit before the filter).
     const id = `presence-${caller.email}`;
     const found = check(await db.models.Presence.get({ id }), 'Presence.get');
     let result;
-    if (found) result = await db.models.Presence.update({ id, status: args.status, lastSeenAt: timestamp });
+    if (found) result = await db.models.Presence.update({ id, organisationId, status: args.status, lastSeenAt: timestamp });
     else {
-      result = await db.models.Presence.create({ id, email: caller.email, status: args.status, lastSeenAt: timestamp });
+      result = await db.models.Presence.create({ id, organisationId, email: caller.email, status: args.status, lastSeenAt: timestamp });
       // Two first heartbeats racing: the create fails on the existing id, so update instead.
-      if (result.errors?.length) result = await db.models.Presence.update({ id, status: args.status, lastSeenAt: timestamp });
+      if (result.errors?.length) result = await db.models.Presence.update({ id, organisationId, status: args.status, lastSeenAt: timestamp });
     }
     const row = check(result, 'Presence.write');
     if (!row) fail('NOT_FOUND', "Your presence couldn't be recorded.");
     return row;
   } catch (error) {
     if (error instanceof TaskApiError) throw new Error(toClientMessage(error.code, error.message));
-    console.error('[presence] heartbeat failed', error); throw new Error('Une erreur est survenue sur le serveur.');
+    console.error('[presence] heartbeat failed', error); throw new Error('Something went wrong on the server. Please try again.');
   }
 };

@@ -6,6 +6,7 @@ import { fail } from '../shared/errors';
 import { runMutation } from '../shared/handler';
 import { generateProjectReport } from '../shared/weeklyReport';
 import { config } from '../shared/config';
+import { assertSameOrganisation, requireOrganisation } from '../shared/tenancy';
 
 const client = await createDataClient(env);
 const ses = new SESv2Client({ region: 'eu-north-1' });
@@ -18,8 +19,9 @@ export const handler = async (rawEvent: EventShape) => {
     return runMutation('generate-weekly-report', { identity: rawEvent.identity, arguments: rawEvent.arguments ?? {} }, async (caller, args) => {
       if (!caller.roles.includes('ADMIN')) fail('FORBIDDEN', 'Only administrators can generate a report manually.');
       const projectId = args.projectId;
-      if (!projectId) fail('VALIDATION', 'Le projet est obligatoire.');
+      if (!projectId) fail('VALIDATION', 'The project is required.');
       const project = check(await client.models.Project.get({ id: projectId }), 'Project.get');
+      assertSameOrganisation(project, requireOrganisation(caller), 'This project');
       if (!project) fail('NOT_FOUND', "This project doesn't exist.");
       return generateProjectReport(client, ses, appUrl, config('SENDER_EMAIL'), project);
     });

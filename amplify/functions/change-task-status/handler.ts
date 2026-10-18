@@ -4,6 +4,7 @@ import { findEventByRequestId, writeEvent } from "../shared/audit";
 import { check, createDataClient, getTask, listDependencies, listProjectTasks } from "../shared/data";
 import { fail } from "../shared/errors";
 import { runMutation } from "../shared/handler";
+import { requireOrganisation } from "../shared/tenancy";
 import { canPerform, checkStatusChange, validateBlockReason } from "../shared/rules";
 import * as v from "../shared/validate";
 
@@ -15,11 +16,12 @@ const client = await createDataClient(env);
  */
 export const handler: Schema["changeTaskStatus"]["functionHandler"] = (event) =>
   runMutation("change-task-status", event, async (caller, args) => {
+    const organisationId = requireOrganisation(caller);
     const requestId = v.requestId(args.clientRequestId);
     const taskId = v.id(args.taskId, "Task");
     const target = v.status(args.status, ["PROPOSED", "TODO", "IN_PROGRESS", "BLOCKED", "DONE"]);
 
-    const task = await getTask(client, taskId);
+    const task = await getTask(client, taskId, organisationId);
 
     // --- Permission: managers, or the MEMBER the task is assigned to (matched by email) ---
     let isAssignee = false;
@@ -32,7 +34,7 @@ export const handler: Schema["changeTaskStatus"]["functionHandler"] = (event) =>
     }
 
     const previous = await findEventByRequestId(client, requestId);
-    if (previous) return getTask(client, previous.entityId);
+    if (previous) return getTask(client, previous.entityId, organisationId);
 
     // --- Business rules ---
     if (task.status === "CANCELLED") fail("VALIDATION", "The status of a cancelled task can't be changed.");
@@ -56,6 +58,7 @@ export const handler: Schema["changeTaskStatus"]["functionHandler"] = (event) =>
     if (!updated) throw new Error("Task.update returned no data");
 
     await writeEvent(client, {
+      organisationId,
       entityId: taskId,
       eventType: "STATUS_CHANGED",
       actorEmail: caller.email,

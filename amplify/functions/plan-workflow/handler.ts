@@ -72,6 +72,7 @@ export const handler = async (event: WorkflowEvent) => {
       await save(rec.id, { payload: { ...payload, plan, model: answer.modelId, generatedAt: new Date().toISOString() }, rationale: plan.summary });
       check(await client.models.TaskEvent.create({
         id: `${rec.id}:AI_PROPOSED`,
+        organisationId: project.organisationId,
         entityId: rec.projectId,
         eventType: "AI_PROPOSED",
         actorType: "AI",
@@ -98,8 +99,9 @@ export const handler = async (event: WorkflowEvent) => {
       if (rec.status === "APPLIED") return { created: Object.keys(payload.createdTaskIds ?? {}).length };
       if (rec.status !== "APPROVED" || !payload.approvedPlan) throw new Error(`recommendation ${rec.id} is not approved`);
       const idByKey: Record<string, string> = { ...(payload.createdTaskIds ?? {}) };
+      const { organisationId } = await getProject(client, rec.projectId);
       for (const task of creationOrder(payload.approvedPlan.tasks)) {
-        const created = await createTaskRecord(client, { email: payload.decidedBy ?? rec.requestedBy ?? "" }, {
+        const created = await createTaskRecord(client, { email: payload.decidedBy ?? rec.requestedBy ?? "", organisationId }, {
           clientRequestId: planTaskRequestId(rec.id, task.key),
           projectId: rec.projectId,
           title: task.title,

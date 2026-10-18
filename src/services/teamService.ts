@@ -1,8 +1,7 @@
 import { getUrl, remove, uploadData } from "aws-amplify/storage";
 import { ApiError } from "./apiError";
-import { logEvent } from "./auditService";
 import { client } from "./client";
-import type { ActorType, TeamMember, TeamRole } from "./client";
+import type { TeamMember, TeamRole } from "./client";
 import { normalizeEmail, normalizeUsername } from "../utils/text";
 
 /** Editable fields of a team member (organisationId and avatarKey are set by the service). */
@@ -22,21 +21,9 @@ export interface MemberInput {
 export type AvatarChange = { kind: "keep" } | { kind: "remove" } | { kind: "replace"; image: Blob };
 export const KEEP_AVATAR: AvatarChange = { kind: "keep" };
 
-/** Who is acting, for the audit log. Defaults to a USER action. */
-export interface AuditActor {
-  email: string | null;
-  type?: ActorType;
-}
-
 export const DUPLICATE_EMAIL = "DuplicateEmail";
 export const DUPLICATE_USERNAME = "DuplicateUsername";
 export const AVATAR_UPLOAD_FAILED = "AvatarUploadFailed";
-
-/** Audit snapshot: only the business fields, not timestamps or relations. */
-function snapshot(member: TeamMember) {
-  const { id, organisationId, name, email, username, avatarKey, role, jobTitle, skills, weeklyCapacityHours } = member;
-  return { id, organisationId, name, email, username, avatarKey, role, jobTitle, skills, weeklyCapacityHours };
-}
 
 /* -------------------------------------------------------------------------- */
 /* Profile pictures (S3, path avatars/*)                                       */
@@ -152,13 +139,12 @@ function toRecordFields(input: MemberInput) {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Writes (each one is audited through logEvent)                               */
+/* Writes (each one is audited by the manage-team-member function)            */
 /* -------------------------------------------------------------------------- */
 
 export async function createTeamMember(
   organisationId: string,
   input: MemberInput,
-  actor: AuditActor,
   avatar: AvatarChange = KEEP_AVATAR,
 ): Promise<TeamMember> {
   await assertUnique(organisationId, input);
@@ -176,14 +162,12 @@ export async function createTeamMember(
     throw ApiError.from(errors, "Team member creation failed");
   }
 
-  await logEvent({ entityId: data.id, eventType: "CREATED", actorType: actor.type === "SYSTEM" ? "SYSTEM" : "USER", after: snapshot(data) });
   return data;
 }
 
 export async function updateTeamMember(
   before: TeamMember,
   input: MemberInput,
-  actor: AuditActor,
   avatar: AvatarChange = KEEP_AVATAR,
 ): Promise<TeamMember> {
   await assertUnique(before.organisationId, input, before.id);
@@ -205,27 +189,12 @@ export async function updateTeamMember(
   // The record now points to the new picture (or none): the old file can go.
   if (avatar.kind !== "keep") await removeAvatar(before.avatarKey);
 
-  await logEvent({
-    entityId: data.id,
-    eventType: "STATUS_CHANGED",
-    actorType: actor.type === "SYSTEM" ? "SYSTEM" : "USER",
-    before: snapshot(before),
-    after: snapshot(data),
-  });
   return data;
 }
 
 /** Deletes a member and their picture. Callers must check there are no open tasks first. */
-export async function deleteTeamMember(member: TeamMember, actor: AuditActor): Promise<void> {
+export async function deleteTeamMember(member: TeamMember): Promise<void> {
   const { errors } = await client.mutations.manageTeamMember({ action: "DELETE", memberId: member.id });
   if (errors?.length) throw ApiError.from(errors, "Team member deletion failed");
   await removeAvatar(member.avatarKey);
-
-  await logEvent({
-    entityId: member.id,
-    eventType: "STATUS_CHANGED",
-    actorType: actor.type === "SYSTEM" ? "SYSTEM" : "USER",
-    before: snapshot(member),
-    after: { deleted: true },
-  });
 }

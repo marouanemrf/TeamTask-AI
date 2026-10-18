@@ -9,7 +9,7 @@ export type ProjectFormValues = Omit<NewProjectInput, "organisationId">;
 
 /** Creates a project in the user's organisation (audit event included). Errors are user-facing messages. */
 export function useCreateProject() {
-  const { email, organisationId } = useUser();
+  const { organisationId } = useUser();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -23,7 +23,7 @@ export function useCreateProject() {
       setSubmitting(true);
       setError(null);
       try {
-        return await createProject({ ...values, organisationId }, { email });
+        return await createProject({ ...values, organisationId });
       } catch (err) {
         console.error("[useCreateProject] Creation failed", err);
         setError(describeApiError(err));
@@ -32,7 +32,7 @@ export function useCreateProject() {
         setSubmitting(false);
       }
     },
-    [organisationId, email],
+    [organisationId],
   );
 
   return { create, submitting, error };

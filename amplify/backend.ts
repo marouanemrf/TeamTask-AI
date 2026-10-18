@@ -21,6 +21,7 @@ import { assistantActivityFunction } from './functions/assistant-activity/resour
 import { careerSuggestionsFunction } from './functions/career-suggestions/resource';
 import { aiPlanningFunction } from './functions/ai-planning/resource';
 import { planWorkflowFunction } from './functions/plan-workflow/resource';
+import { manageProjectFunction } from './functions/manage-project/resource';
 import { defineWorkflows } from './custom/workflows/resource';
 import { taskRestFunction } from './functions/task-rest/resource';
 import { auditArchiveFunction } from './functions/audit-archive/resource';
@@ -56,6 +57,7 @@ const backend = defineBackend({
   careerSuggestionsFunction,
   aiPlanningFunction,
   planWorkflowFunction,
+  manageProjectFunction,
   taskRestFunction,
   auditArchiveFunction,
 });
@@ -81,6 +83,7 @@ for (const fn of [
   backend.manageProfileFunction,
   backend.presenceFunction,
   backend.aiPlanningFunction,
+  backend.manageProjectFunction,
 ]) {
   fn.addEnvironment('USER_POOL_ID', userPool.userPoolId);
   fn.resources.lambda.addToRolePolicy(
@@ -89,7 +92,8 @@ for (const fn of [
 }
 backend.manageTeamMemberFunction.addEnvironment('USER_POOL_ID', userPool.userPoolId);
 backend.manageTeamMemberFunction.resources.lambda.addToRolePolicy(new PolicyStatement({
-  actions: ['cognito-idp:AdminGetUser', 'cognito-idp:AdminCreateUser', 'cognito-idp:AdminDeleteUser', 'cognito-idp:AdminDisableUser', 'cognito-idp:AdminEnableUser', 'cognito-idp:AdminAddUserToGroup', 'cognito-idp:AdminRemoveUserFromGroup'],
+  // CreateGroup / ListGroupsForUser: the organisation groups that isolate each organisation's data.
+  actions: ['cognito-idp:AdminGetUser', 'cognito-idp:AdminCreateUser', 'cognito-idp:AdminDeleteUser', 'cognito-idp:AdminDisableUser', 'cognito-idp:AdminEnableUser', 'cognito-idp:AdminAddUserToGroup', 'cognito-idp:AdminRemoveUserFromGroup', 'cognito-idp:AdminListGroupsForUser', 'cognito-idp:CreateGroup'],
   resources: [userPool.userPoolArn],
 }));
 
@@ -212,7 +216,7 @@ const operations = defineOperations({
     'manage-team-member': backend.manageTeamMemberFunction, 'manage-profile': backend.manageProfileFunction, presence: backend.presenceFunction,
     'assistant-chat': backend.assistantChatFunction, 'assistant-tools': backend.assistantToolsFunction, 'assistant-activity': backend.assistantActivityFunction,
     'career-suggestions': backend.careerSuggestionsFunction, 'ai-planning': backend.aiPlanningFunction, 'plan-workflow': backend.planWorkflowFunction,
-    'task-rest': backend.taskRestFunction,
+    'task-rest': backend.taskRestFunction, 'manage-project': backend.manageProjectFunction,
   }).map(([name, fn]) => [name, fn.resources.lambda])),
   apiName: `teamtask-api-${deployment}`,
   graphqlApiId: backend.data.resources.cfnResources.cfnGraphqlApi.attrApiId,
