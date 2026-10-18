@@ -231,7 +231,8 @@ export function defineAssistant(props: AssistantProps) {
     resources: [table.tableArn],
     conditions: { 'ForAllValues:StringLike': { 'dynamodb:LeadingKeys': ['RATE#career#*'] } },
   }));
-  for (const name of ['TeamMember', 'Task']) props.careerFunction.addToRolePolicy(new PolicyStatement({ actions: ['dynamodb:Scan'], resources: [props.tables[name].tableArn] }));
+  // Scan on Project: the organisation's open projects that the suggestions are matched with.
+  for (const name of ['TeamMember', 'Task', 'Project']) props.careerFunction.addToRolePolicy(new PolicyStatement({ actions: ['dynamodb:Scan'], resources: [props.tables[name].tableArn] }));
   // GetItem on TeamMember: a manager asking for a member's suggestions (by member id).
   props.careerFunction.addToRolePolicy(new PolicyStatement({ actions: ['dynamodb:GetItem'], resources: [props.tables.Project.tableArn, props.tables.TeamMember.tableArn] }));
   props.careerFunction.addToRolePolicy(new PolicyStatement({

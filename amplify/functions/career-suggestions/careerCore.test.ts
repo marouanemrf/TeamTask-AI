@@ -10,6 +10,10 @@ const profile: CareerProfile = {
   experience: "SOC Analyst, 2022–2025",
   education: "MSc Cybersecurity",
   projects: ["Cloud hardening"],
+  openProjects: [
+    { name: "Cloud hardening", objective: "Harden the AWS landing zone", skills: ["IAM", "AWS security"] },
+    { name: "ISO 27001 readiness", objective: null, skills: ["ISO 27001"] },
+  ],
 };
 
 describe("career suggestions", () => {
@@ -23,6 +27,15 @@ describe("career suggestions", () => {
     expect(prompt).toMatch(/^<profile>\n/);
     expect(prompt).toContain("Skills: SIEM; IAM; AWS security");
     expect(prompt).toContain("Projects worked on: Cloud hardening");
+    expect(prompt).toContain("<projects>\n- Cloud hardening | objective: Harden the AWS landing zone | skills needed: IAM, AWS security");
+  });
+
+  it("keeps only open projects that exist, and an empty list means no current need", () => {
+    const names = profile.openProjects.map((p) => p.name);
+    const answer = `{"suggestions":[{"title":"Cloud Security Engineer","projects":["cloud hardening","Mars mission"]},{"title":"Security Architect","projects":[]}]}`;
+    const [first, second] = parseSuggestions(answer, profile.skills, names) ?? [];
+    expect(first.projects).toEqual(["Cloud hardening"]);
+    expect(second.projects).toEqual([]);
   });
 
   it("keeps only real profile skills under 'skills you have'", () => {
@@ -33,6 +46,7 @@ describe("career suggestions", () => {
       skillsYouHave: ["AWS security", "IAM"],
       skillsToDevelop: ["Terraform"],
       nextSteps: ["Take the AWS Security Specialty"],
+      projects: [],
     }]);
   });
 

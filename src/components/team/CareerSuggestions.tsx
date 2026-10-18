@@ -50,6 +50,8 @@ function CareerSuggestions({ state, onRefresh, ownProfile = true }: { state: Car
                       <dd>{s.why.join(" ")}</dd>
                     </>
                   )}
+                  <dt>Projects</dt>
+                  <dd>{s.projects?.length ? s.projects.join(", ") : "No current project needs this role — there's no need right now."}</dd>
                   <dt>{ownProfile ? "Skills you have" : "Skills they have"}</dt>
                   <dd>{s.skillsYouHave.join(", ") || `None listed in ${profile} yet`}</dd>
                   <dt>Skills to develop</dt>

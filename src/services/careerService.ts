@@ -7,6 +7,8 @@ export interface CareerSuggestion {
   skillsYouHave: string[];
   skillsToDevelop: string[];
   nextSteps: string[];
+  /** Open projects of the organisation that need this path now; empty = no current need. */
+  projects?: string[];
 }
 
 export interface CareerSuggestionsResult {

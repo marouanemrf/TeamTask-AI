@@ -5,7 +5,7 @@ import type { ScanCommandInput } from "@aws-sdk/lib-dynamodb";
 import { identityFromClaims } from "../assistant-chat/chatCore";
 import { organisationOf } from "../shared/assistantIdentity";
 import { isProfileTooThin, parseSuggestions, profilePrompt, SYSTEM_PROMPT } from "./careerCore";
-import type { CareerProfile } from "./careerCore";
+import type { CareerProfile, OpenProject } from "./careerCore";
 
 /**
  * POST /profile/career-suggestions — AI career suggestions from a member's profile.
@@ -92,6 +92,15 @@ export const handler = async (event: ApiEvent) => {
     .filter((p): p is Record<string, unknown> => !!p && p.organisationId === member.organisationId)
     .map((p) => String(p.name));
 
+  // The organisation's projects that are not closed, with the skills their open tasks need.
+  const orgProjects = await scan<Record<string, unknown>>({ TableName: process.env.TABLE_PROJECT!, FilterExpression: "organisationId = :o AND #s <> :closed", ExpressionAttributeNames: { "#s": "status" }, ExpressionAttributeValues: { ":o": member.organisationId, ":closed": "CLOSED" } });
+  const openTasks = await scan<{ projectId?: string; requiredSkills?: unknown }>({ TableName: process.env.TABLE_TASK!, FilterExpression: "organisationId = :o AND NOT #s IN (:done, :cancelled)", ExpressionAttributeNames: { "#s": "status" }, ExpressionAttributeValues: { ":o": member.organisationId, ":done": "DONE", ":cancelled": "CANCELLED" }, ProjectionExpression: "projectId, requiredSkills" });
+  const openProjects: OpenProject[] = orgProjects.slice(0, 30).map((p) => ({
+    name: String(p.name),
+    objective: typeof p.objective === "string" ? p.objective : null,
+    skills: [...new Set(openTasks.filter((t) => t.projectId === p.id).flatMap((t) => (Array.isArray(t.requiredSkills) ? t.requiredSkills.filter((s): s is string => typeof s === "string") : [])))],
+  }));
+
   const str = (v: unknown) => (typeof v === "string" && v.trim() ? v : null);
   const profile: CareerProfile = {
     name: String(member.name ?? ""),
@@ -101,6 +110,7 @@ export const handler = async (event: ApiEvent) => {
     experience: str(member.experience),
     education: str(member.education),
     projects,
+    openProjects,
   };
   const basedOn = { jobTitle: !!profile.jobTitle, skills: profile.skills.length, experience: !!profile.experience, education: !!profile.education, summary: !!profile.professionalSummary, projects: projects.length };
   if (isProfileTooThin(profile)) return respond(event, 200, { status: "INCOMPLETE", basedOn });
@@ -115,7 +125,7 @@ export const handler = async (event: ApiEvent) => {
     }));
     if (result.stopReason === "guardrail_intervened") return respond(event, 422, { error: { code: "BLOCKED", message: "Suggestions couldn't be generated for this profile." } });
     const text = (result.output?.message?.content ?? []).map((c) => c.text ?? "").join("");
-    const suggestions = parseSuggestions(text, profile.skills);
+    const suggestions = parseSuggestions(text, profile.skills, openProjects.map((p) => p.name));
     console.info(JSON.stringify({ fn: "career-suggestions", outcome: suggestions ? "OK" : "UNUSABLE", count: suggestions?.length ?? 0, inputTokens: result.usage?.inputTokens, outputTokens: result.usage?.outputTokens }));
     if (!suggestions) return respond(event, 502, { error: { code: "UNUSABLE_ANSWER", message: "The suggestions couldn't be generated. Try again." } });
     return respond(event, 200, { status: "OK", generatedAt: now.toISOString(), model: process.env.MODEL_ID, basedOn, suggestions });
