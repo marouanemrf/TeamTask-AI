@@ -453,6 +453,9 @@ const schema = a.schema({
   addMilestone: a.mutation().arguments({ projectId: a.id().required(), name: a.string().required(), dueDate: a.date() })
     .returns(a.ref('Milestone')).handler(a.handler.function(manageProjectFunction)).authorization((allow) => [allow.authenticated()]),
   updateMyProfile: a.mutation().arguments({ name: a.string(), phoneNumber: a.string(), jobTitle: a.string(), skills: a.string().array(), experience: a.string(), education: a.string(), professionalSummary: a.string(), avatarKey: a.string(), unavailableFrom: a.date(), unavailableUntil: a.date() }).returns(a.ref('TeamMember')).handler(a.handler.function(manageProfileFunction)).authorization((allow) => [allow.authenticated()]),
+  // Called by the app at sign-in: puts the caller in their organisation groups for their current
+  // role (Cognito groups can be changed in the console); true when the groups changed.
+  syncMyAccess: a.mutation().returns(a.boolean()).handler(a.handler.function(manageProfileFunction)).authorization((allow) => [allow.authenticated()]),
   heartbeatPresence: a.mutation().arguments({ status: a.string().required() }).returns(a.ref('Presence')).handler(a.handler.function(presenceFunction)).authorization((allow) => [allow.authenticated()]),
 
   Presence: a.model({ organisationId: a.id(), email: a.email().required(), status: a.enum(['ONLINE', 'BUSY']), lastSeenAt: a.datetime().required() })

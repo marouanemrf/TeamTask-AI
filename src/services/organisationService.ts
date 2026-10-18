@@ -4,6 +4,21 @@ import type { Organisation } from "./client";
 
 export const DEFAULT_ORGANISATION_NAME = "Gogo Security";
 
+/**
+ * Asks the server to put the user in their organisation groups for their current role (an
+ * administrator may have changed the role in the Cognito console). When the groups changed,
+ * the tokens are refreshed so the new access applies at once. Never throws.
+ */
+export async function syncAccess(): Promise<void> {
+  try {
+    const { data, errors } = await client.mutations.syncMyAccess();
+    if (errors?.length) console.warn("[organisationService] Access sync refused", errors);
+    if (data) await fetchAuthSession({ forceRefresh: true });
+  } catch (err) {
+    console.warn("[organisationService] Access sync failed", err);
+  }
+}
+
 /** The organisation the signed-in user may read (the data API only returns their own). */
 async function ownOrganisation(): Promise<Organisation | null> {
   const { data } = await client.models.Organisation.list();

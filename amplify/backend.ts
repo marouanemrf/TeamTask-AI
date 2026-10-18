@@ -90,6 +90,11 @@ for (const fn of [
     new PolicyStatement({ actions: ['cognito-idp:AdminGetUser'], resources: [userPool.userPoolArn] }),
   );
 }
+// syncMyAccess: keeps each user's organisation groups in line with their role (see shared/tenancy.ts).
+backend.manageProfileFunction.resources.lambda.addToRolePolicy(new PolicyStatement({
+  actions: ['cognito-idp:AdminListGroupsForUser', 'cognito-idp:AdminAddUserToGroup', 'cognito-idp:AdminRemoveUserFromGroup', 'cognito-idp:CreateGroup'],
+  resources: [userPool.userPoolArn],
+}));
 backend.manageTeamMemberFunction.addEnvironment('USER_POOL_ID', userPool.userPoolId);
 backend.manageTeamMemberFunction.resources.lambda.addToRolePolicy(new PolicyStatement({
   // CreateGroup / ListGroupsForUser: the organisation groups that isolate each organisation's data.

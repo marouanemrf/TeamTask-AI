@@ -1,8 +1,11 @@
+import { AdminAddUserToGroupCommand, AdminListGroupsForUserCommand, AdminRemoveUserFromGroupCommand, CognitoIdentityProviderClient, CreateGroupCommand } from '@aws-sdk/client-cognito-identity-provider';
 import { env } from '$amplify/env/manage-profile';
 import type { Schema } from '../../data/resource';
+import { getCaller } from '../shared/auth';
 import { check, createDataClient } from '../shared/data';
-import { fail } from '../shared/errors';
+import { TaskApiError, fail, toClientMessage } from '../shared/errors';
 import { runMutation } from '../shared/handler';
+import { organisationGroupsFor } from '../shared/tenancy';
 import { normalizeUsername } from '../shared/text';
 import * as v from '../shared/validate';
 
@@ -36,7 +39,7 @@ function freeUsername(email: string, taken: Set<string>): string {
  * - An ADMIN without a team profile yet (account created in Cognito and added to the organisation
  *   groups) gets one in their organisation on first save.
  */
-export const handler: Schema['updateMyProfile']['functionHandler'] = (event) => runMutation('update-my-profile', event, async (caller, args) => {
+const updateMyProfile: Schema['updateMyProfile']['functionHandler'] = (event) => runMutation('update-my-profile', event, async (caller, args) => {
   const phone = args.phoneNumber?.trim();
   if (phone && !/^\+?[0-9 ()-]{7,20}$/.test(phone)) fail('VALIDATION', 'Enter a valid phone number.');
   for (const value of [args.name, args.jobTitle, args.experience, args.education, args.professionalSummary]) if (value && value.length > 5000) fail('VALIDATION', 'A profile field is longer than allowed.');
@@ -102,3 +105,55 @@ export const handler: Schema['updateMyProfile']['functionHandler'] = (event) => 
   console.info(JSON.stringify({ fn: 'update-my-profile', outcome: 'ADMIN_PROFILE_CREATED', memberId: created.id }));
   return created;
 });
+
+const cognito = new CognitoIdentityProviderClient({});
+
+/**
+ * syncMyAccess: puts the caller in their organisation's groups for the role they have now.
+ * Roles are the Cognito role groups (an administrator may change them in the console); the
+ * organisation is the one of the caller's team profile. Both are set by administrators only, so
+ * the caller can't give themselves access. Also keeps the profile's role fields in line (display).
+ * Returns true when the groups changed (the app then refreshes its tokens).
+ */
+async function syncMyAccess(identity: unknown): Promise<boolean> {
+  const caller = await getCaller(identity);
+  const pool = process.env.USER_POOL_ID!;
+  const members = await listAll((nextToken) => db.models.TeamMember.list({ nextToken, limit: 1000 }), 'TeamMember.list');
+  const mine = members.find((m) => m.email.toLowerCase() === caller.email);
+  if (!mine?.organisationId) return false;
+
+  const current = ((await cognito.send(new AdminListGroupsForUserCommand({ UserPoolId: pool, Username: caller.username, Limit: 60 }))).Groups ?? []).map((g) => g.GroupName ?? '');
+  const roles = ROLES.filter((r) => current.includes(r));
+  const wanted = new Set(organisationGroupsFor(mine.organisationId, roles));
+  let changed = false;
+  for (const group of wanted) {
+    if (current.includes(group)) continue;
+    await cognito.send(new CreateGroupCommand({ UserPoolId: pool, GroupName: group, Description: 'TeamTask organisation (data isolation)' })).catch((e: Error) => { if (e.name !== 'GroupExistsException') throw e; });
+    await cognito.send(new AdminAddUserToGroupCommand({ UserPoolId: pool, Username: caller.username, GroupName: group }));
+    changed = true;
+  }
+  // Organisation groups the caller should no longer have (e.g. managers group after a demotion).
+  for (const group of current) {
+    if ((ROLES as readonly string[]).includes(group) || wanted.has(group)) continue;
+    await cognito.send(new AdminRemoveUserFromGroupCommand({ UserPoolId: pool, Username: caller.username, GroupName: group }));
+    changed = true;
+  }
+  const shown = roles.length ? roles : ['VIEWER' as const];
+  if (mine.role !== shown[0] || (mine.roles ?? []).join() !== shown.join()) {
+    check(await db.models.TeamMember.update({ id: mine.id, role: shown[0], roles: [...shown] }), 'TeamMember.update');
+  }
+  if (changed) console.info(JSON.stringify({ fn: 'sync-my-access', outcome: 'GROUPS_UPDATED', memberId: mine.id, roles: shown }));
+  return changed;
+}
+
+// Amplify passes the GraphQL field name at the top level of the event (fieldName, typeName).
+export const handler = async (event: Parameters<typeof updateMyProfile>[0] & { fieldName?: string }, ...rest: unknown[]) => {
+  if (event.fieldName !== 'syncMyAccess') return (updateMyProfile as (...a: unknown[]) => unknown)(event, ...rest);
+  try {
+    return await syncMyAccess(event.identity);
+  } catch (error) {
+    if (error instanceof TaskApiError) throw new Error(toClientMessage(error.code, error.message));
+    console.error(JSON.stringify({ fn: 'sync-my-access', outcome: 'ERROR', error: error instanceof Error ? error.stack : String(error) }));
+    throw new Error(toClientMessage('INTERNAL', 'Something went wrong on the server. Please try again.'));
+  }
+};

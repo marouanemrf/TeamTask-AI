@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { getCurrentUserInfo, signOutUser } from "../services/authService";
 import type { Organisation } from "../services/client";
-import { getOrCreateDefaultOrganisation } from "../services/organisationService";
+import { getOrCreateDefaultOrganisation, syncAccess } from "../services/organisationService";
 import { isAdmin, isManager, primaryRole, toRoles } from "../utils/roles";
 import type { Role } from "../utils/roles";
 
@@ -25,6 +25,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
     loadStarted.current = true;
 
     (async () => {
+      // First the organisation groups for the current role, so roles and data match from the start.
+      await syncAccess();
       const user = await getCurrentUserInfo();
       const userRoles = toRoles(user.groups);
       setEmail(user.email);
