@@ -173,9 +173,10 @@ async function manageTeam(caller: Caller, organisationId: string, input: TeamArg
   return team!;
 }
 
-export const handler = (event: { arguments: MemberArgs | TeamArgs; identity?: unknown; info?: { fieldName?: string } }) => runMutation('manage-team-member', event, async (caller, args) => {
+// Amplify passes the GraphQL field name at the top level of the event (fieldName, typeName).
+export const handler = (event: { arguments: MemberArgs | TeamArgs; identity?: unknown; fieldName?: string; info?: { fieldName?: string } }) => runMutation('manage-team-member', event, async (caller, args) => {
   if (!caller.roles.includes('ADMIN')) fail('FORBIDDEN', 'Only administrators can manage accounts and teams.');
-  if (event.info?.fieldName === 'manageTeam') return manageTeam(caller, requireOrganisation(caller), args as TeamArgs);
+  if ((event.fieldName ?? event.info?.fieldName) === 'manageTeam') return manageTeam(caller, requireOrganisation(caller), args as TeamArgs);
   const input = args as MemberArgs;
   const action = input.action;
   if (action === 'SETUP_ORGANISATION') return setupOrganisation(caller, input);

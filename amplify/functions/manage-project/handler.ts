@@ -101,11 +101,12 @@ async function addMilestone(organisationId: string, email: string, args: Milesto
   return created;
 }
 
-export const handler = (event: { arguments: SaveArgs | MilestoneArgs; identity?: unknown; info?: { fieldName?: string } }) =>
+// Amplify passes the GraphQL field name at the top level of the event (fieldName, typeName).
+export const handler = (event: { arguments: SaveArgs | MilestoneArgs; identity?: unknown; fieldName?: string; info?: { fieldName?: string } }) =>
   runMutation("manage-project", event, async (caller, args) => {
     if (!isManagerRole(caller.roles)) fail("FORBIDDEN", "Only administrators and project managers can manage projects.");
     const organisationId = requireOrganisation(caller);
-    if (event.info?.fieldName === "addMilestone") return addMilestone(organisationId, caller.email, args as MilestoneArgs);
+    if ((event.fieldName ?? event.info?.fieldName) === "addMilestone") return addMilestone(organisationId, caller.email, args as MilestoneArgs);
     const save = args as SaveArgs;
     return save.projectId ? updateProject(organisationId, caller.email, save.projectId, save) : createProject(organisationId, caller.email, save);
   }) as ReturnType<Schema["saveProject"]["functionHandler"]>;
